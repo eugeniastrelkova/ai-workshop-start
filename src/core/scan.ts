@@ -1,4 +1,4 @@
-import { findSkills, type SkillFile } from './find.ts';
+import { findSkills, placeOf, type SkillFile } from './find.ts';
 import { sortSkills, type Repository, type Skill } from './model.ts';
 import { parseSkill } from './parse.ts';
 
@@ -17,12 +17,12 @@ export type ScanResult = { repository: Repository; skills: Skill[]; warnings: st
 
 /** fetch → find → parse. Nothing is stored: the result is all there is. */
 export async function scan(source: Source): Promise<ScanResult> {
-  const files = findSkills(source.paths, source.repository.name);
+  const files = findSkills(source.paths);
   // The files are read at the same time: on GitHub, each one is a request.
   const results = await Promise.all(files.map((file) => readSkill(source, file)));
   return {
     repository: source.repository,
-    skills: sortSkills(results.flatMap((result) => (result.skill ? [result.skill] : []))),
+    skills: sortSkills(mergeCopies(results.flatMap((result) => (result.skill ? [result.skill] : [])))),
     warnings: [...source.warnings, ...results.flatMap((result) => (result.warning ? [result.warning] : []))],
   };
 }
@@ -38,7 +38,20 @@ async function readSkill(source: Source, file: SkillFile): Promise<{ skill?: Ski
     name: parsed.name ?? file.name,
     description: parsed.description,
     commit: source.repository.commit,
-    copies: file.copies,
+    copies: [],
   };
   return { skill, warning: parsed.warning && `${file.path}: ${parsed.warning}` };
+}
+
+/** One skill per name and place: linked from the first agents' folder, `also in` the others. */
+function mergeCopies(skills: Skill[]): Skill[] {
+  const copies = new Map<string, Skill[]>();
+  for (const skill of skills) {
+    const key = `${skill.name}\0${placeOf(skill.path).place}`;
+    copies.set(key, [...(copies.get(key) ?? []), skill]);
+  }
+  return [...copies.values()].map((same) => {
+    const [first, ...others] = same.sort((a, b) => placeOf(a.path).rank - placeOf(b.path).rank);
+    return { ...first, copies: others.map((skill) => skill.path) };
+  });
 }

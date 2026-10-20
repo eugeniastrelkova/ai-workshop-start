@@ -38,17 +38,20 @@ test('scan prints the repository, then each skill with its first sentence and pi
   );
 });
 
-test('./fixture: every skill, sorted by name, linked to its file, with a warning for the malformed one', () => {
+test('./fixture: every skill, sorted by name, linked to its file, copies merged, with a warning for the malformed one', () => {
   const root = pathToFileURL(FIXTURE).href;
   assert.equal(fixture.code, 0);
   assert.equal(
     fixture.stdout,
     [
-      'fixture · 3 skills',
+      'fixture · 4 skills',
       "code-style — Follow the project's code style.",
       `  ${root}/.github/skills/code-style/SKILL.md`,
       'commits — Write commit messages the way this repository does.',
-      `  ${root}/.claude/skills/commits/SKILL.md`,
+      `  ${root}/.agents/skills/commits/SKILL.md`,
+      '  also in .claude/skills/commits/SKILL.md',
+      'commits — Write commit messages for the Kotlin plugin.',
+      `  ${root}/plugins/kotlin/.claude/skills/commits/SKILL.md`,
       'release-checklist',
       `  ${root}/.agents/skills/release-checklist/SKILL.md`,
     ].join('\n'),
