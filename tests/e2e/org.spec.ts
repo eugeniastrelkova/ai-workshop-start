@@ -7,6 +7,9 @@ test('organization scan', async ({ page, demo }) => {
   await demo.caption('Organization scan: every repository of JetBrains with a skill');
   await demo.type('input[name=repo]', 'https://github.com/JetBrains');
   await page.keyboard.press('Enter');
+  // A failed scan shows its message instead of a heading: fail on it, saying why.
+  await page.locator('h2, p.error').first().waitFor({ timeout: 60_000 });
+  await expect(page.locator('p.error')).toHaveCount(0);
   // The counts move with JetBrains; the shape does not.
   await expect(page.locator('h2').first()).toHaveText(/^JetBrains · \d+ skills in \d+ repositories$/, { timeout: 60_000 });
   await expect(page.getByRole('link', { name: 'JetBrains/kotlin', exact: true })).toBeVisible();
