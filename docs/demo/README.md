@@ -2,6 +2,7 @@
 
 Short videos of Skill Atlas at work: the UI e2e tests in [tests/e2e/](../../tests/e2e/), each one
 recording itself. How: the [demo-video](../../.agents/skills/demo-video/SKILL.md) skill.
+CI records them on every run too: the `e2e-recordings` artifact of the `e2e` job.
 
 | Video | Shows | Recorded with |
 | --- | --- | --- |

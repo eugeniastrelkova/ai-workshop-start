@@ -1,4 +1,4 @@
-# CI for your Skill Atlas repository: the typecheck, the tests and the CLI itself, on every push
+# CI for your Skill Atlas repository: the typecheck, the tests, the CLI itself and the UI e2e tests, on every push
 # and pull request, on a clean machine. A pull request is ready when this is green.
 name: CI
 on:
@@ -34,3 +34,28 @@ jobs:
           for i in $(seq 50); do curl -fs -o /dev/null http://127.0.0.1:4321/ && break; sleep 0.1; done
           curl -fsS 'http://127.0.0.1:4321/?repo=./fixture' | grep -F 'fixture</a> · 4 skills'
           kill %1
+  # The UI e2e tests, in the image of tests/e2e/Dockerfile (scripts/e2e.sh): the screenshots of the key
+  # moments must match tests/e2e/screenshots/ to the pixel. Every run keeps its recordings.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run e2e
+        env:
+          # The organization scan, on real GitHub: the 60 requests an hour of no token run out.
+          GITHUB_TOKEN: ${{ github.token }}
+      # The videos of each test, and of a failure its trace and the screenshot diffs; the HTML report.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: e2e-recordings
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14
