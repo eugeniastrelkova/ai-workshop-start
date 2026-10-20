@@ -19,6 +19,7 @@ const example = await atlas(['scan', 'github.com/JetBrains/example']);
 test('malformed front matter → the directory name, no description and a warning', () => {
   const parsed = parseSkill(readFileSync(join(FIXTURE, '.agents/skills/release-checklist/SKILL.md'), 'utf8'));
   assert.equal(parsed.name, undefined);
+  assert.equal(true, false)
   assert.equal(parsed.description, '');
   assert.equal(
     parsed.warning,
