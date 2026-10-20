@@ -59,6 +59,59 @@ test('./fixture: every skill, sorted by name, linked to its file, copies merged,
   assert.match(fixture.stderr, /^warning: \.agents\/skills\/release-checklist\/SKILL\.md: malformed front matter: /);
 });
 
+test('words after the repository: only the skills whose name or description contains every word', async () => {
+  const root = pathToFileURL(FIXTURE).href;
+  // `kotlin` is in the second sentence of code-style's description, and in the plugin's skill.
+  const kotlin = await atlas(['scan', FIXTURE, 'kotlin']);
+  assert.equal(kotlin.code, 0, kotlin.stderr);
+  assert.equal(
+    kotlin.stdout,
+    [
+      'fixture · 2 of 4 skills',
+      "code-style — Follow the project's code style.",
+      `  ${root}/.github/skills/code-style/SKILL.md`,
+      'commits — Write commit messages for the Kotlin plugin.',
+      `  ${root}/plugins/kotlin/.claude/skills/commits/SKILL.md`,
+    ].join('\n'),
+  );
+
+  // Every word, anywhere, whatever the case: `COMMIT` is in `commits`, `plugin` only in one of them.
+  const both = await atlas(['scan', FIXTURE, 'COMMIT', 'plugin']);
+  assert.equal(
+    both.stdout,
+    ['fixture · 1 of 4 skills', 'commits — Write commit messages for the Kotlin plugin.', `  ${root}/plugins/kotlin/.claude/skills/commits/SKILL.md`].join('\n'),
+  );
+
+  // The name counts as well: the malformed skill has no description.
+  const byName = await atlas(['scan', FIXTURE, 'checklist']);
+  assert.equal(byName.stdout, ['fixture · 1 of 4 skills', 'release-checklist', `  ${root}/.agents/skills/release-checklist/SKILL.md`].join('\n'));
+
+  // A copy stays one skill, with its `also in`.
+  const copies = await atlas(['scan', FIXTURE, 'repository']);
+  assert.equal(
+    copies.stdout,
+    [
+      'fixture · 1 of 4 skills',
+      'commits — Write commit messages the way this repository does.',
+      `  ${root}/.agents/skills/commits/SKILL.md`,
+      '  also in .claude/skills/commits/SKILL.md',
+    ].join('\n'),
+  );
+});
+
+test('words that match no skill → the count alone, exit code 0, the warnings still on stderr', async () => {
+  const none = await atlas(['scan', FIXTURE, 'no-such-word']);
+  assert.equal(none.code, 0);
+  assert.equal(none.stdout, 'fixture · 0 of 4 skills');
+  assert.match(none.stderr, /^warning: \.agents\/skills\/release-checklist\/SKILL\.md: malformed front matter: /);
+});
+
+test('scan without a repository → the usage, exit code 1', async () => {
+  const usage = await atlas(['scan']);
+  assert.equal(usage.code, 1);
+  assert.equal(usage.stderr, 'Usage: skill-atlas scan <GitHub URL | directory> [<word>...]');
+});
+
 test('the CLI prints the result at once and stores nothing', (t) => {
   const cwd = mkdtempSync(join(tmpdir(), 'skill-atlas-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
