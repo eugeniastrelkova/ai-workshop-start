@@ -1,3 +1,4 @@
+import { AtlasError, LimitError } from './errors.ts';
 import { findSkills, placeOf, type SkillFile } from './find.ts';
 import { sortSkills, type Repository, type Skill } from './model.ts';
 import { parseSkill } from './parse.ts';
@@ -14,6 +15,18 @@ export type Source = {
 };
 
 export type ScanResult = { repository: Repository; skills: Skill[]; warnings: string[] };
+
+/** A GitHub organization or user: the repositories that may have skills, each opened when scanned. */
+export type Owner = {
+  id: string;
+  /** `https://github.com/<owner>`. */
+  url: string;
+  repositories: { id: string; open(): Promise<Source> }[];
+  /** What listing the repositories had to leave out. */
+  warnings: string[];
+};
+
+export type OwnerResult = { owner: Owner; repositories: ScanResult[]; warnings: string[] };
 
 /** fetch → find → parse. Nothing is stored: the result is all there is. */
 export async function scan(source: Source): Promise<ScanResult> {
@@ -56,4 +69,28 @@ function mergeCopies(skills: Skill[]): Skill[] {
     const [first, ...others] = same.sort((a, b) => placeOf(a.path).rank - placeOf(b.path).rank);
     return { ...first, copies: others.map((skill) => skill.path) };
   });
+}
+
+/**
+ * Each repository, scanned as one; only those with skills, by id. A repository that fails is a
+ * warning, unless GitHub refuses every further request.
+ */
+export async function scanOwner(owner: Owner): Promise<OwnerResult> {
+  const results = await Promise.all(
+    owner.repositories.map(async ({ id, open }): Promise<{ id: string; result?: ScanResult; warnings: string[] }> => {
+      try {
+        const result = await scan(await open());
+        return { id, result, warnings: result.warnings.map((warning) => `${id}: ${warning}`) };
+      } catch (error) {
+        if (!(error instanceof AtlasError) || error instanceof LimitError) throw error;
+        return { id, warnings: [`${id}: ${error.message}; skipped`] };
+      }
+    }),
+  );
+  results.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return {
+    owner,
+    repositories: results.flatMap(({ result }) => (result && result.skills.length > 0 ? [result] : [])),
+    warnings: [...owner.warnings, ...results.flatMap((result) => result.warnings)],
+  };
 }

@@ -10,7 +10,7 @@ import { after, test } from 'node:test';
 import { createBrowserBackend } from '../src/browser.ts';
 import { run } from '../src/commands.ts';
 import { serve } from '../src/web.ts';
-import { CLI, EXAMPLE_COMMIT, FIXTURE, open } from './helpers.ts';
+import { CLI, EXAMPLE_COMMIT, FIXTURE, github, KOTLIN_COMMIT, open } from './helpers.ts';
 
 const { server, url } = await serve(open, 0);
 after(() => server.close());
@@ -71,6 +71,40 @@ test('./fixture: the order of scan, copies as also in, the malformed skill by it
   assert.match(
     fixture.html,
     /<\/ul>\n<ul class="warnings"><li>warning: \.agents\/skills\/release-checklist\/SKILL\.md: malformed front matter: /,
+  );
+});
+
+test('an organization: the owner, then each repository with skills, then the warnings', async () => {
+  const organization = await page(`/?repo=${encodeURIComponent('https://github.com/JetBrains')}`);
+  assert.equal(organization.status, 200);
+  assert.match(organization.html, /<title>JetBrains · Skill Atlas<\/title>/);
+  assert.match(organization.html, /<h2><a href="https:\/\/github\.com\/JetBrains">JetBrains<\/a> · 2 skills in 2 repositories<\/h2>/);
+  const repositories = [...organization.html.matchAll(/<h3><a href="([^"]+)">([^<]+)<\/a> · ([^<]+)<\/h3>/g)].map(([, link, id, count]) => [link, id, count]);
+  assert.deepEqual(repositories, [
+    ['https://github.com/JetBrains/example', 'JetBrains/example', '1 skill'],
+    ['https://github.com/JetBrains/kotlin', 'JetBrains/kotlin', '1 skill'],
+  ]);
+  assert.deepEqual(summaries(organization.html), ['commits — Write commit messages the way this repository does.', 'build']);
+  assert.ok(organization.html.includes(`https://github.com/JetBrains/kotlin/blob/${KOTLIN_COMMIT}/.agents/skills/build/SKILL.md`));
+  assert.ok(
+    organization.html.includes(
+      '<ul class="warnings"><li>warning: JetBrains/gone: Repository not found: https://github.com/JetBrains/gone; skipped</li>' +
+        '<li>warning: JetBrains/kotlin: .agents/skills/build/SKILL.md: no front matter; using the directory name</li></ul>',
+    ),
+  );
+});
+
+test('the browser terminal scans an organization too, without a token', async () => {
+  const browser = createBrowserBackend({ fetch: github });
+  assert.equal(
+    await browser.run('$ skill-atlas scan https://github.com/JetBrains'),
+    [
+      'JetBrains · 1 skill in 1 repository',
+      '',
+      'JetBrains/example · 1 skill',
+      'commits — Write commit messages the way this repository does.',
+      `  https://github.com/JetBrains/example/blob/${EXAMPLE_COMMIT}/.claude/skills/commits/SKILL.md`,
+    ].join('\n'),
   );
 });
 
