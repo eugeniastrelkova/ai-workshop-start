@@ -76,7 +76,8 @@ expectation to match a result you did not intend.
 Commit with a short imperative subject, as the log already reads (`Add code-review skill`). Push,
 then `gh pr create`, or `POST /repos/eugeniastrelkova/ai-workshop-start/pulls` with `curl` and
 `$GITHUB_TOKEN` when `gh` is missing. The body is three short parts — what the issue asked, what
-the spec now says, which tests cover it — and ends with `Closes #<number>`. Opening it is not the
+the spec now says, which tests cover it — and ends with `Closes #<number>`. A change a user can see
+gets a UI e2e test and its video too, recorded with [demo-video](../demo-video/SKILL.md) and linked in the body. Opening it is not the
 end: watch it, as below.
 
 ## After the pull request

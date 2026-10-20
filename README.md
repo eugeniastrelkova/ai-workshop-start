@@ -22,7 +22,8 @@ Words after the repository keep only the skills whose name or description contai
 `./skill-atlas serve` opens the same scan as a page at http://127.0.0.1:4321/: a field for the
 repository, then its skills, each with its whole `SKILL.md`.
 
-Set `GITHUB_TOKEN` for a higher GitHub rate limit. `npm test` runs the tests.
+Set `GITHUB_TOKEN` for a higher GitHub rate limit. `npm test` runs the tests; `npm run e2e`, the UI e2e tests in a browser.
 
 - [spec/](spec/): what it does. [AGENTS.md](AGENTS.md): the definition of done.
 - [fixture/](fixture/README.md): a small repository for the tests.
+- [docs/demo/](docs/demo/README.md): videos of the filter and the organization scan, recorded by the UI e2e tests.
