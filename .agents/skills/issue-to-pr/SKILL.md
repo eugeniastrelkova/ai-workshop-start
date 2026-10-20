@@ -81,17 +81,16 @@ end: watch it, as below.
 
 ## After the pull request
 
-Do not stop at the link. Check the pull request every few minutes (about 5) until CI is green and
-no review comment is waiting on you:
+Do not stop at the link: this session owns the pull request for its first hour. Every few minutes
+(about 5), do one pass of [address-review](../address-review/SKILL.md) — fix a red check, answer
+each comment that is waiting, with its `atlas:answered` marker. Finish what is in progress, but
+start nothing new after the hour.
+
+Then hand over, even if everything is green, so the automation knows it owns the pull request now:
 
 ```console
-gh pr checks <number>                      # CI status
-gh pr view <number> --comments             # reviews and comments
-curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" \
-  https://api.github.com/repos/eugeniastrelkova/ai-workshop-start/commits/<sha>/check-runs
+gh pr comment <number> --body $'Stopped watching; the address-review automation takes over.\n<!-- atlas:handoff -->'
 ```
 
-A red check → read its log, fix it locally the same way (test first), push to the same branch. A
-review comment → make the change it asks for in spec, tests and code, or reply with why not. Stop
-when everything is green and nothing is waiting on you, or when the pull request is merged or
-closed, and report the state it ended in.
+Stop sooner, without the handoff, if the pull request is merged or closed. Report the state it
+ended in.
