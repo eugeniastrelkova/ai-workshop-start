@@ -76,5 +76,22 @@ expectation to match a result you did not intend.
 Commit with a short imperative subject, as the log already reads (`Add code-review skill`). Push,
 then `gh pr create`, or `POST /repos/eugeniastrelkova/ai-workshop-start/pulls` with `curl` and
 `$GITHUB_TOKEN` when `gh` is missing. The body is three short parts — what the issue asked, what
-the spec now says, which tests cover it — and ends with `Closes #<number>`. The pull request is
-ready when CI is green.
+the spec now says, which tests cover it — and ends with `Closes #<number>`. Opening it is not the
+end: watch it, as below.
+
+## After the pull request
+
+Do not stop at the link. Check the pull request every few minutes (about 5) until CI is green and
+no review comment is waiting on you:
+
+```console
+gh pr checks <number>                      # CI status
+gh pr view <number> --comments             # reviews and comments
+curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" \
+  https://api.github.com/repos/eugeniastrelkova/ai-workshop-start/commits/<sha>/check-runs
+```
+
+A red check → read its log, fix it locally the same way (test first), push to the same branch. A
+review comment → make the change it asks for in spec, tests and code, or reply with why not. Stop
+when everything is green and nothing is waiting on you, or when the pull request is merged or
+closed, and report the state it ended in.
