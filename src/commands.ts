@@ -2,11 +2,11 @@
 // terminal: everything that differs between them comes in through the context.
 import { AtlasError } from './core/errors.ts';
 import { skillLink, type Repository, type Skill } from './core/model.ts';
-import { scan, type Source } from './core/scan.ts';
+import { scan, scanOwner, type Owner, type ScanResult, type Source } from './core/scan.ts';
 
 export type Context = {
-  /** Opens what the user asked to scan. */
-  open(input: string): Promise<Source>;
+  /** Opens what the user asked to scan: a repository, or an organization's repositories. */
+  open(input: string): Promise<Source | Owner>;
   print(text: string): void;
   /** Errors and warnings. */
   error(text: string): void;
@@ -17,7 +17,7 @@ export type Context = {
 const usage = `Usage: skill-atlas <command>
 
   scan <GitHub URL | directory> [<word>...]
-                                  find every SKILL.md in a repository and print it;
+                                  find every SKILL.md in a repository, or an organization, and print it;
                                   with words, only the skills that contain every one
   serve [--port <port>]           open the web view on 127.0.0.1, port 4321 by default
   help                            show this help`;
@@ -41,9 +41,35 @@ export async function run(args: string[], context: Context): Promise<number> {
 async function scanCommand(args: string[], context: Context) {
   const [input, ...words] = args;
   if (!input) throw new AtlasError('Usage: skill-atlas scan <GitHub URL | directory> [<word>...]');
-  const result = await scan(await context.open(input));
-  printRepository(result.repository, result.skills, words, context);
+  const opened = await context.open(input);
+  const result = isOwner(opened) ? await scanOwner(opened) : await scan(opened);
+  if ('owner' in result) {
+    const { shown, count } = filterOwner(result.repositories, words);
+    context.print(`${result.owner.id} · ${count}`);
+    for (const repository of shown) {
+      context.print('');
+      printRepository(repository.repository, repository.skills, words, context);
+    }
+  } else printRepository(result.repository, result.skills, words, context);
   for (const warning of result.warnings) context.error(`warning: ${warning}`);
+}
+
+export function isOwner(opened: Source | Owner): opened is Owner {
+  return 'repositories' in opened;
+}
+
+/**
+ * An organization's repositories with skills left after the words, and its count:
+ * `N skills in M repositories`; filtered, `N of M skills in K repositories`.
+ */
+export function filterOwner(repositories: ScanResult[], words: string[]): { shown: ScanResult[]; count: string } {
+  const shown = repositories.filter((repository) => filterSkills(repository.skills, words).length > 0);
+  const skills = countSkills(
+    shown.flatMap((repository) => filterSkills(repository.skills, words)),
+    repositories.flatMap((repository) => repository.skills),
+    words,
+  );
+  return { shown, count: `${skills} in ${shown.length} ${shown.length === 1 ? 'repository' : 'repositories'}` };
 }
 
 async function serveCommand(args: string[], context: Context) {

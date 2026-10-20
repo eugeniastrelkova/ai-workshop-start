@@ -13,6 +13,9 @@ build-tools-bump-gradle-api — Bumps the Gradle API version that Kotlin Gradle 
 …
 ```
 
+`./skill-atlas scan https://github.com/JetBrains` scans each repository of an organization (or a
+user) and prints those with skills.
+
 Words after the repository keep only the skills whose name or description contains every one:
 `./skill-atlas scan ./fixture kotlin`.
 

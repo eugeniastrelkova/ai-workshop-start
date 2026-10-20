@@ -1,12 +1,13 @@
-// The web view: one page with a field for the repository, then its skills and their SKILL.md.
+// The web view: one page with a field for the repository, then its skills and their SKILL.md; for an
+// organization, each of its repositories with skills.
 // Each request scans afresh; nothing is stored. Local only: it reads local directories.
 import { createServer, type Server } from 'node:http';
-import { countSkills, filterSkills, firstSentence } from './commands.ts';
+import { countSkills, filterOwner, filterSkills, firstSentence, isOwner } from './commands.ts';
 import { AtlasError } from './core/errors.ts';
 import { skillLink, type Skill } from './core/model.ts';
-import { scan, type ScanResult, type Source } from './core/scan.ts';
+import { scan, scanOwner, type Owner, type OwnerResult, type ScanResult, type Source } from './core/scan.ts';
 
-export type Open = (input: string) => Promise<Source>;
+export type Open = (input: string) => Promise<Source | Owner>;
 
 export type Page = { status: number; html: string };
 
@@ -34,9 +35,14 @@ export async function render(url: URL, open: Open): Promise<Page> {
   const words = url.searchParams.get('words') ?? '';
   if (!input) return { status: 200, html: layout('Skill Atlas', '', words, '') };
   try {
-    const result = await scan(await open(input));
-    const html = repository(result, words.split(/\s+/).filter(Boolean));
-    return { status: 200, html: layout(`${result.repository.id} · Skill Atlas`, input, words, html) };
+    const opened = await open(input);
+    const filter = words.split(/\s+/).filter(Boolean);
+    if (isOwner(opened)) {
+      const result = await scanOwner(opened);
+      return { status: 200, html: layout(`${result.owner.id} · Skill Atlas`, input, words, owner(result, filter)) };
+    }
+    const result = await scan(opened);
+    return { status: 200, html: layout(`${result.repository.id} · Skill Atlas`, input, words, repository(result, filter)) };
   } catch (error) {
     const message = error instanceof AtlasError ? error.message : `Unexpected error: ${error instanceof Error ? error.message : String(error)}`;
     const status = error instanceof AtlasError ? 400 : 500;
@@ -44,15 +50,25 @@ export async function render(url: URL, open: Open): Promise<Page> {
   }
 }
 
-/** `<owner>/<repo> · N skills`, each skill folded over its SKILL.md, then the warnings. */
-function repository({ repository, skills, warnings }: ScanResult, words: string[]): string {
+/** `<owner> · N skills in M repositories`, each repository with skills left after the words, then all the warnings. */
+function owner({ owner, repositories, warnings }: OwnerResult, words: string[]): string {
+  const { shown, count } = filterOwner(repositories, words);
+  const heading = `<h2><a href="${escape(owner.url)}">${escape(owner.id)}</a> · ${count}</h2>`;
+  return [heading, ...shown.map((result) => repository({ ...result, warnings: [] }, words, 'h3')), warned(warnings)].join('\n');
+}
+
+/** `<owner>/<repo> · N skills`, filtered `N of M skills`, each skill folded over its SKILL.md, then the warnings. */
+function repository({ repository, skills, warnings }: ScanResult, words: string[], heading = 'h2'): string {
   const shown = filterSkills(skills, words);
-  const count = countSkills(shown, skills, words);
   const list = shown.map((skill) => skillItem(skill, skillLink(repository, skill))).join('\n');
-  const warned = warnings.length
+  const title = `<a href="${escape(repository.url)}">${escape(repository.id)}</a> · ${countSkills(shown, skills, words)}`;
+  return `<${heading}>${title}</${heading}>\n<ul class="skills">\n${list}\n</ul>\n${warned(warnings)}`;
+}
+
+function warned(warnings: string[]): string {
+  return warnings.length
     ? `<ul class="warnings">${warnings.map((warning) => `<li>warning: ${escape(warning)}</li>`).join('')}</ul>`
     : '';
-  return `<h2><a href="${escape(repository.url)}">${escape(repository.id)}</a> · ${count}</h2>\n<ul class="skills">\n${list}\n</ul>\n${warned}`;
 }
 
 function skillItem(skill: Skill, link: string): string {
@@ -125,6 +141,8 @@ button {
 button:hover { filter: brightness(1.1); }
 h2 { margin: 2.5rem 0 1rem; font-size: 1.125rem; font-weight: 600; color: var(--muted); }
 h2 a { color: var(--text); }
+h3 { margin: 2rem 0 .75rem; font-size: 1rem; font-weight: 600; color: var(--muted); }
+h3 a { color: var(--text); }
 .skills { display: grid; gap: .75rem; margin: 0; padding: 0; list-style: none; }
 .skill {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
@@ -160,7 +178,7 @@ pre {
 <h1><a href="/">Skill Atlas</a></h1>
 <p class="tagline">Every agent skill in a repository, with its SKILL.md.</p>
 <form method="get" action="/">
-<input name="repo" value="${escape(input)}" placeholder="https://github.com/owner/repo or a local directory" aria-label="Repository" autofocus>
+<input name="repo" value="${escape(input)}" placeholder="https://github.com/owner/repo, https://github.com/owner or a local directory" aria-label="Repository" autofocus>
 <input name="words" value="${escape(words)}" placeholder="Words to filter by" aria-label="Words">
 <button type="submit">Scan</button>
 </form>
