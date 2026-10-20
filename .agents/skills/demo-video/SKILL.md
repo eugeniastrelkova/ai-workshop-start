@@ -1,30 +1,42 @@
 ---
 name: demo-video
-description: How to record a short demo video of Skill Atlas — a real terminal and the web view, driven by Playwright from prepared cases — into docs/demo/, for a pull request that changes what a user sees.
+description: How to record a demo video of Skill Atlas for a pull request — the UI e2e tests in tests/e2e/ (Playwright, the web view) record themselves; keep the videos of the ones that show the change in docs/demo/.
 ---
 
 # Demo video
 
-A pull request that changes what a user sees (what `scan` prints, the page) gets a short video of
-it working, in [docs/demo/](../../../docs/demo/README.md), linked in the pull request body. Each
-video is recorded by [scripts/demo.ts](../../../scripts/demo.ts) from **cases** in
-[cases/](cases/): what to type, what to wait for. Nothing is filmed by hand.
+A pull request that changes what a user sees gets a short video of it working, in
+[docs/demo/](../../../docs/demo/README.md), linked in the pull request body. The video is not
+filmed by hand: it is a **UI e2e test** recording itself. Only the UI e2e tests are recorded, never
+the terminal; a change to what `scan` prints is shown through the page, which prints the same.
 
-## How it records
+## The UI e2e tests
 
-- A **real terminal**: `ttyd` serves `bash` as a page; Playwright types the commands, key by key.
-- The **web view**: `./skill-atlas serve`, on port 4321; Playwright fills the fields and submits.
-- One headless Chromium page, the cases one after another, so the cases give **one** `.webm`
-  (1280×720). A caption bar at the bottom says what each part shows.
-- A `wait` that never sees its text fails the run: exit code 1, *no video*, and a screenshot
-  `<out>.failed.png` of the screen at that moment. A broken demo is never saved as if it worked.
+[tests/e2e/](../../../tests/e2e/), run by Playwright ([playwright.config.ts](../../../playwright.config.ts))
+in Chromium against `./skill-atlas serve` on port 4321, which the config starts. Every test is
+recorded (`video: 'on'`); each one is a demo and a test at once:
+
+- **Assertions** on what a user sees, as in `tests/web.test.ts`: the heading text
+  (`fixture · 3 of 4 skills`), the skill names, the URL. A test that does not assert is not a demo.
+- **Pace**, from `test` and `demo` in [tests/e2e/demo.ts](../../../tests/e2e/demo.ts):
+  `demo.caption('…')` (a bar at the bottom saying what is shown; it stays across a submit),
+  `demo.type(selector, text)` (key by key, at the end of the field), `demo.pause(ms)` (time to
+  read; about 1.5 s after each result).
+- One test, one video, under about 30 s. The **title** is the file name: `filter by words` →
+  `docs/demo/filter-by-words.webm`.
+
+| Test | Shows |
+| --- | --- |
+| `filter.spec.ts` › `filter by words` | `./fixture`: 4 skills, then `commit` (3 of 4), `commit kotlin` (2 of 4), one SKILL.md unfolded |
+| `org.spec.ts` › `organization scan` | JetBrains, each repository with skills, then filtered by `kotlin` |
+
+For a new change, extend the test that covers it or add one beside them.
 
 ## Once per machine
 
 ```console
 npm ci
-npx playwright install chromium         # or the manual way below
-which ttyd                              # apt-get install ttyd
+npx playwright install chromium
 ```
 
 Where the Playwright CDN is blocked (`403 Blocked by network policy`), install the same build by
@@ -44,15 +56,18 @@ sudo env PATH="$PATH" npx playwright install-deps chromium      # the libraries 
 ## Record
 
 ```console
-GITHUB_TOKEN=$(gh auth token) node scripts/demo.ts filter-cli filter-web org-cli \
-  --out docs/demo/filter-and-org-scan.webm
+GITHUB_TOKEN=$(gh auth token) DEMO=docs/demo npm run e2e                     # all of them
+GITHUB_TOKEN=$(gh auth token) DEMO=docs/demo npm run e2e -- filter.spec.ts   # one
 ```
 
-- `GITHUB_TOKEN` for a case on real GitHub: an organization scan without it lists every
-  repository and runs out of the 60 requests an hour.
-- Behind an HTTP proxy, Node's `fetch` needs `NODE_USE_ENV_PROXY=1`; the recorder sets it for the
-  servers it starts. `EAI_AGAIN` from `./skill-atlas` by hand means that is missing.
-- Under a minute, a few MB. Record one case alone first; it is quicker to fix.
+- `DEMO=<directory>`: each **passing** test's video saved there as `<title>.webm`. A failing
+  test saves none there; its video and a trace of the error stay in `test-results/`, to see why.
+- Without `DEMO`, the videos stay in `test-results/` only (ignored by git).
+- `GITHUB_TOKEN` for a test on real GitHub: an organization scan without it lists every repository
+  and runs out of the 60 requests an hour.
+- Behind an HTTP proxy, Node's `fetch` needs `NODE_USE_ENV_PROXY=1`; the config sets it for the
+  server. `EAI_AGAIN` in the page means that is missing.
+- Not in CI, for now: CI runs `npm test`, not `npm run e2e`.
 
 ## Check it, then link it
 
@@ -60,33 +75,16 @@ Do not link a video you have not looked at. Take a few frames and look at each o
 
 ```console
 ffprobe -v error -show_entries format=duration -of csv=p=0 docs/demo/<name>.webm
-ffmpeg -v error -ss 12 -i docs/demo/<name>.webm -frames:v 1 /tmp/frame-12.png
+ffmpeg -v error -ss 5 -i docs/demo/<name>.webm -frames:v 1 /tmp/frame-5.png
+ffmpeg -v error -sseof -1 -i docs/demo/<name>.webm -frames:v 1 /tmp/frame-end.png
 ```
 
-Then add a line for it to [docs/demo/README.md](../../../docs/demo/README.md): what it shows and
-the command that recorded it. In the pull request body, link the file on the branch:
-`https://github.com/<owner>/<repo>/blob/<branch>/docs/demo/<name>.webm`.
+Commit only the videos the change needs, and add a line for each to
+[docs/demo/README.md](../../../docs/demo/README.md). In the pull request body, link the file on the
+branch: `https://github.com/<owner>/<repo>/blob/<branch>/docs/demo/<name>.webm`.
 
-## Cases
+## On real GitHub
 
-| Case | Shows |
-| --- | --- |
-| `filter-cli` | `scan ./fixture`, then `commit` (`3 of 4`), then `commit kotlin` (`2 of 4`) |
-| `filter-web` | the page: `./fixture` and `commit`, then one SKILL.md unfolded |
-| `org-cli` | `scan https://github.com/JetBrains`, its repositories, then filtered by `kotlin` |
-| `org-web` | the page: JetBrains, filtered by `kotlin` |
-| `broken` | waits for text that never appears: run it to see the failure path, exit code 1 |
-
-A case is a JSON list of steps, run in order:
-
-- `{ "caption": "…" }`: the caption bar from here on; `""` hides it
-- `{ "open": "terminal:" }`, `{ "open": "web:" }`, or any URL
-- `{ "type": "<command>" }`: on a cleared terminal, key by key, then Enter
-- `{ "wait": "<text>", "timeout": 30000 }`: until the text appears *after* the last action
-- `{ "fill": "<selector>", "text": "…" }`, `{ "click": "<selector>" }`, `{ "press": "Enter" }`
-- `{ "pause": <ms> }`: time to read; about 1.5 s after each result
-
-Wait for text that does not move: on real GitHub the counts change from one run to the next (`104
-skills`, then `92`), so wait for ` skills in `, not for a number. Keep output to one screen: the
-terminal shows only what fits, and `2>/dev/null | grep ' · '` keeps an organization to its
-headings — say so in the caption when warnings are hidden.
+The counts move from one run to the next (JetBrains: `104 skills`, then `92`, then `103`): assert
+on the shape, `/^JetBrains · \d+ skills in \d+ repositories$/`, and on a repository that stays, not
+on a number. Wait for it with `{ timeout: 60_000 }`: an organization takes 10–20 s.

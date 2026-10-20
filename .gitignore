@@ -1,5 +1,3 @@
 node_modules/
 test-results/
 playwright-report/
-docs/demo/*.failed.png
-docs/demo/.recording/
