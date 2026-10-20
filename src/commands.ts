@@ -2,7 +2,7 @@
 // terminal: everything that differs between them comes in through the context.
 import { AtlasError } from './core/errors.ts';
 import { skillLink, type Repository, type Skill } from './core/model.ts';
-import { scan, scanOwner, type Owner, type Source } from './core/scan.ts';
+import { scan, scanOwner, type Owner, type ScanResult, type Source } from './core/scan.ts';
 
 export type Context = {
   /** Opens what the user asked to scan: a repository, or an organization's repositories. */
@@ -16,7 +16,9 @@ export type Context = {
 
 const usage = `Usage: skill-atlas <command>
 
-  scan <GitHub URL | directory>   find every SKILL.md in a repository, or an organization, and print it
+  scan <GitHub URL | directory> [<word>...]
+                                  find every SKILL.md in a repository, or an organization, and print it;
+                                  with words, only the skills that contain every one
   serve [--port <port>]           open the web view on 127.0.0.1, port 4321 by default
   help                            show this help`;
 
@@ -37,17 +39,18 @@ export async function run(args: string[], context: Context): Promise<number> {
 }
 
 async function scanCommand(args: string[], context: Context) {
-  if (args.length !== 1) throw new AtlasError('Usage: skill-atlas scan <GitHub URL | directory>');
-  const opened = await context.open(args[0]);
+  const [input, ...words] = args;
+  if (!input) throw new AtlasError('Usage: skill-atlas scan <GitHub URL | directory> [<word>...]');
+  const opened = await context.open(input);
   const result = isOwner(opened) ? await scanOwner(opened) : await scan(opened);
   if ('owner' in result) {
-    const skills = result.repositories.reduce((sum, repository) => sum + repository.skills.length, 0);
-    context.print(`${result.owner.id} · ${countOf(skills, result.repositories.length)}`);
-    for (const repository of result.repositories) {
+    const { shown, count } = filterOwner(result.repositories, words);
+    context.print(`${result.owner.id} · ${count}`);
+    for (const repository of shown) {
       context.print('');
-      printRepository(repository.repository, repository.skills, context);
+      printRepository(repository.repository, repository.skills, words, context);
     }
-  } else printRepository(result.repository, result.skills, context);
+  } else printRepository(result.repository, result.skills, words, context);
   for (const warning of result.warnings) context.error(`warning: ${warning}`);
 }
 
@@ -55,10 +58,18 @@ export function isOwner(opened: Source | Owner): opened is Owner {
   return 'repositories' in opened;
 }
 
-/** `N skills`, and ` in M repositories` for an organization. */
-export function countOf(skills: number, repositories?: number): string {
-  const count = `${skills} ${skills === 1 ? 'skill' : 'skills'}`;
-  return repositories === undefined ? count : `${count} in ${repositories} ${repositories === 1 ? 'repository' : 'repositories'}`;
+/**
+ * An organization's repositories with skills left after the words, and its count:
+ * `N skills in M repositories`; filtered, `N of M skills in K repositories`.
+ */
+export function filterOwner(repositories: ScanResult[], words: string[]): { shown: ScanResult[]; count: string } {
+  const shown = repositories.filter((repository) => filterSkills(repository.skills, words).length > 0);
+  const skills = countSkills(
+    shown.flatMap((repository) => filterSkills(repository.skills, words)),
+    repositories.flatMap((repository) => repository.skills),
+    words,
+  );
+  return { shown, count: `${skills} in ${shown.length} ${shown.length === 1 ? 'repository' : 'repositories'}` };
 }
 
 async function serveCommand(args: string[], context: Context) {
@@ -69,13 +80,29 @@ async function serveCommand(args: string[], context: Context) {
 }
 
 /** `<owner>/<repo> · N skills`, then each skill's name, first sentence and link. */
-function printRepository(repository: Repository, skills: Skill[], { print }: Context) {
-  print(`${repository.id} · ${countOf(skills.length)}`);
-  for (const skill of skills) {
+function printRepository(repository: Repository, skills: Skill[], words: string[], { print }: Context) {
+  const shown = filterSkills(skills, words);
+  print(`${repository.id} · ${countSkills(shown, skills, words)}`);
+  for (const skill of shown) {
     print(skill.description ? `${skill.name} — ${firstSentence(skill.description)}` : skill.name);
     print(`  ${skillLink(repository, skill)}`);
     if (skill.copies.length > 0) print(`  also in ${skill.copies.join(', ')}`);
   }
+}
+
+/** The skills whose name or description contains every word, case-insensitive; no words: all. */
+export function filterSkills(skills: Skill[], words: string[]): Skill[] {
+  const wanted = words.map((word) => word.toLowerCase()).filter(Boolean);
+  return skills.filter((skill) => {
+    const text = `${skill.name}\n${skill.description}`.toLowerCase();
+    return wanted.every((word) => text.includes(word));
+  });
+}
+
+/** `N skills`; filtered by words, `N of M skills`. */
+export function countSkills(shown: Skill[], all: Skill[], words: string[]): string {
+  const noun = all.length === 1 ? 'skill' : 'skills';
+  return words.some(Boolean) ? `${shown.length} of ${all.length} ${noun}` : `${shown.length} ${noun}`;
 }
 
 export function firstSentence(text: string): string {

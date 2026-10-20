@@ -108,6 +108,41 @@ test('the browser terminal scans an organization too, without a token', async ()
   );
 });
 
+test('an organization with words: only the repositories with a match, all the warnings', async () => {
+  const organization = await page(`/?repo=${encodeURIComponent('https://github.com/JetBrains')}&words=build`);
+  assert.equal(organization.status, 200);
+  assert.match(organization.html, /JetBrains<\/a> · 1 of 2 skills in 1 repository<\/h2>/);
+  assert.match(organization.html, /<h3><a href="https:\/\/github\.com\/JetBrains\/kotlin">JetBrains\/kotlin<\/a> · 1 of 1 skill<\/h3>/);
+  assert.doesNotMatch(organization.html, /<h3><a href="https:\/\/github\.com\/JetBrains\/example"/);
+  assert.deepEqual(summaries(organization.html), ['build']);
+  assert.match(organization.html, /<input name="words" value="build"/);
+  assert.match(organization.html, /warning: JetBrains\/gone/);
+});
+
+test('words: a second field, submitted as &words=<words>, filtering as scan does', async () => {
+  assert.match((await page('/')).html, /<input name="words" value=""/);
+  const repo = encodeURIComponent(FIXTURE);
+
+  const filtered = await page(`/?repo=${repo}&words=${encodeURIComponent('COMMIT  plugin')}`);
+  assert.equal(filtered.status, 200);
+  assert.match(filtered.html, /fixture<\/a> · 1 of 4 skills<\/h2>/);
+  assert.deepEqual(summaries(filtered.html), ['commits — Write commit messages for the Kotlin plugin.']);
+  assert.match(filtered.html, /<input name="words" value="COMMIT  plugin"/);
+  assert.match(filtered.html, /<ul class="warnings">/);
+
+  const kotlin = await page(`/?repo=${repo}&words=kotlin`);
+  assert.deepEqual(summaries(kotlin.html), ['code-style — Follow the project&#39;s code style.', 'commits — Write commit messages for the Kotlin plugin.']);
+
+  const none = await page(`/?repo=${repo}&words=no-such-word`);
+  assert.equal(none.status, 200);
+  assert.match(none.html, /fixture<\/a> · 0 of 4 skills<\/h2>/);
+  assert.deepEqual(summaries(none.html), []);
+
+  const empty = await page(`/?repo=${repo}&words=`);
+  assert.match(empty.html, /fixture<\/a> · 4 skills<\/h2>/);
+  assert.equal(summaries(empty.html).length, 4);
+});
+
 test('the input and SKILL.md are text, never markup', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'skill-atlas-web-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));

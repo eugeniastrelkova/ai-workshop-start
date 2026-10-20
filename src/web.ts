@@ -2,7 +2,7 @@
 // organization, each of its repositories with skills.
 // Each request scans afresh; nothing is stored. Local only: it reads local directories.
 import { createServer, type Server } from 'node:http';
-import { countOf, firstSentence, isOwner } from './commands.ts';
+import { countSkills, filterOwner, filterSkills, firstSentence, isOwner } from './commands.ts';
 import { AtlasError } from './core/errors.ts';
 import { skillLink, type Skill } from './core/model.ts';
 import { scan, scanOwner, type Owner, type OwnerResult, type ScanResult, type Source } from './core/scan.ts';
@@ -28,37 +28,40 @@ export function serve(open: Open, port: number): Promise<{ server: Server; url: 
   });
 }
 
-/** `/`: the field; `/?repo=<input>`: the field, then the scan or why it failed. */
+/** `/`: the fields; `/?repo=<input>&words=<words>`: the fields, then the scan or why it failed. */
 export async function render(url: URL, open: Open): Promise<Page> {
-  if (url.pathname !== '/') return { status: 404, html: layout('Not found', '', '<p class="error">Not found</p>') };
+  if (url.pathname !== '/') return { status: 404, html: layout('Not found', '', '', '<p class="error">Not found</p>') };
   const input = url.searchParams.get('repo')?.trim() ?? '';
-  if (!input) return { status: 200, html: layout('Skill Atlas', '', '') };
+  const words = url.searchParams.get('words') ?? '';
+  if (!input) return { status: 200, html: layout('Skill Atlas', '', words, '') };
   try {
     const opened = await open(input);
+    const filter = words.split(/\s+/).filter(Boolean);
     if (isOwner(opened)) {
       const result = await scanOwner(opened);
-      return { status: 200, html: layout(`${result.owner.id} · Skill Atlas`, input, owner(result)) };
+      return { status: 200, html: layout(`${result.owner.id} · Skill Atlas`, input, words, owner(result, filter)) };
     }
     const result = await scan(opened);
-    return { status: 200, html: layout(`${result.repository.id} · Skill Atlas`, input, repository(result)) };
+    return { status: 200, html: layout(`${result.repository.id} · Skill Atlas`, input, words, repository(result, filter)) };
   } catch (error) {
     const message = error instanceof AtlasError ? error.message : `Unexpected error: ${error instanceof Error ? error.message : String(error)}`;
     const status = error instanceof AtlasError ? 400 : 500;
-    return { status, html: layout('Skill Atlas', input, `<p class="error">${escape(message)}</p>`) };
+    return { status, html: layout('Skill Atlas', input, words, `<p class="error">${escape(message)}</p>`) };
   }
 }
 
-/** `<owner> · N skills in M repositories`, each repository with skills, then all the warnings. */
-function owner({ owner, repositories, warnings }: OwnerResult): string {
-  const skills = repositories.reduce((sum, repository) => sum + repository.skills.length, 0);
-  const heading = `<h2><a href="${escape(owner.url)}">${escape(owner.id)}</a> · ${countOf(skills, repositories.length)}</h2>`;
-  return [heading, ...repositories.map((result) => repository({ ...result, warnings: [] }, 'h3')), warned(warnings)].join('\n');
+/** `<owner> · N skills in M repositories`, each repository with skills left after the words, then all the warnings. */
+function owner({ owner, repositories, warnings }: OwnerResult, words: string[]): string {
+  const { shown, count } = filterOwner(repositories, words);
+  const heading = `<h2><a href="${escape(owner.url)}">${escape(owner.id)}</a> · ${count}</h2>`;
+  return [heading, ...shown.map((result) => repository({ ...result, warnings: [] }, words, 'h3')), warned(warnings)].join('\n');
 }
 
-/** `<owner>/<repo> · N skills`, each skill folded over its SKILL.md, then the warnings. */
-function repository({ repository, skills, warnings }: ScanResult, heading = 'h2'): string {
-  const list = skills.map((skill) => skillItem(skill, skillLink(repository, skill))).join('\n');
-  const title = `<a href="${escape(repository.url)}">${escape(repository.id)}</a> · ${countOf(skills.length)}`;
+/** `<owner>/<repo> · N skills`, filtered `N of M skills`, each skill folded over its SKILL.md, then the warnings. */
+function repository({ repository, skills, warnings }: ScanResult, words: string[], heading = 'h2'): string {
+  const shown = filterSkills(skills, words);
+  const list = shown.map((skill) => skillItem(skill, skillLink(repository, skill))).join('\n');
+  const title = `<a href="${escape(repository.url)}">${escape(repository.id)}</a> · ${countSkills(shown, skills, words)}`;
   return `<${heading}>${title}</${heading}>\n<ul class="skills">\n${list}\n</ul>\n${warned(warnings)}`;
 }
 
@@ -85,7 +88,7 @@ ${copies}
 </li>`;
 }
 
-function layout(title: string, input: string, body: string): string {
+function layout(title: string, input: string, words: string, body: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -126,10 +129,11 @@ form {
   border: 1px solid var(--border); border-radius: 999px; box-shadow: var(--shadow);
 }
 form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); }
-input[name=repo] {
+input[name=repo], input[name=words] {
   flex: 1; min-width: 0; padding: .5rem 1rem; border: 0; outline: 0; background: transparent;
   color: inherit; font: inherit;
 }
+input[name=words] { flex: 0 1 12rem; border-left: 1px solid var(--border); }
 button {
   padding: .5rem 1.25rem; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-text);
   font: inherit; font-weight: 600; cursor: pointer; transition: filter .15s;
@@ -175,6 +179,7 @@ pre {
 <p class="tagline">Every agent skill in a repository, with its SKILL.md.</p>
 <form method="get" action="/">
 <input name="repo" value="${escape(input)}" placeholder="https://github.com/owner/repo, https://github.com/owner or a local directory" aria-label="Repository" autofocus>
+<input name="words" value="${escape(words)}" placeholder="Words to filter by" aria-label="Words">
 <button type="submit">Scan</button>
 </form>
 ${body}
