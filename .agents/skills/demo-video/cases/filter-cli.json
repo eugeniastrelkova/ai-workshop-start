@@ -1,0 +1,15 @@
+[
+  { "caption": "Filter by words, in the terminal: every skill of ./fixture first" },
+  { "open": "terminal:" },
+  { "type": "./skill-atlas scan ./fixture 2>/dev/null" },
+  { "wait": "fixture · 4 skills" },
+  { "pause": 1500 },
+  { "caption": "Only the skills whose name or description contains \"commit\"" },
+  { "type": "./skill-atlas scan ./fixture commit 2>/dev/null" },
+  { "wait": "fixture · 3 of 4 skills" },
+  { "pause": 1500 },
+  { "caption": "Every word must match: \"commit kotlin\"" },
+  { "type": "./skill-atlas scan ./fixture commit kotlin 2>/dev/null" },
+  { "wait": "fixture · 2 of 4 skills" },
+  { "pause": 2000 }
+]

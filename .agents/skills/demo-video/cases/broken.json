@@ -1,0 +1,5 @@
+[
+  { "open": "terminal:" },
+  { "type": "./skill-atlas scan ./fixture" },
+  { "wait": "text that never appears", "timeout": 3000 }
+]

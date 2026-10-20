@@ -1,0 +1,11 @@
+[
+  { "caption": "Organization scan: every repository of JetBrains with a skill (warnings hidden)" },
+  { "open": "terminal:" },
+  { "type": "./skill-atlas scan https://github.com/JetBrains 2>/dev/null | grep ' · '" },
+  { "wait": " skills in ", "timeout": 60000 },
+  { "pause": 2500 },
+  { "caption": "The same organization, filtered by \"kotlin\"" },
+  { "type": "./skill-atlas scan https://github.com/JetBrains kotlin 2>/dev/null | grep ' · '" },
+  { "wait": " skills in ", "timeout": 60000 },
+  { "pause": 3000 }
+]

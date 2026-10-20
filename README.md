@@ -26,3 +26,4 @@ Set `GITHUB_TOKEN` for a higher GitHub rate limit. `npm test` runs the tests.
 
 - [spec/](spec/): what it does. [AGENTS.md](AGENTS.md): the definition of done.
 - [fixture/](fixture/README.md): a small repository for the tests.
+- [docs/demo/](docs/demo/README.md): a short video of the filter and the organization scan.
