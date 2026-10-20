@@ -74,6 +74,30 @@ test('./fixture: the order of scan, copies as also in, the malformed skill by it
   );
 });
 
+test('words: a second field, submitted as &words=<words>, filtering as scan does', async () => {
+  assert.match((await page('/')).html, /<input name="words" value=""/);
+  const repo = encodeURIComponent(FIXTURE);
+
+  const filtered = await page(`/?repo=${repo}&words=${encodeURIComponent('COMMIT  plugin')}`);
+  assert.equal(filtered.status, 200);
+  assert.match(filtered.html, /fixture<\/a> · 1 of 4 skills<\/h2>/);
+  assert.deepEqual(summaries(filtered.html), ['commits — Write commit messages for the Kotlin plugin.']);
+  assert.match(filtered.html, /<input name="words" value="COMMIT  plugin"/);
+  assert.match(filtered.html, /<ul class="warnings">/);
+
+  const kotlin = await page(`/?repo=${repo}&words=kotlin`);
+  assert.deepEqual(summaries(kotlin.html), ['code-style — Follow the project&#39;s code style.', 'commits — Write commit messages for the Kotlin plugin.']);
+
+  const none = await page(`/?repo=${repo}&words=no-such-word`);
+  assert.equal(none.status, 200);
+  assert.match(none.html, /fixture<\/a> · 0 of 4 skills<\/h2>/);
+  assert.deepEqual(summaries(none.html), []);
+
+  const empty = await page(`/?repo=${repo}&words=`);
+  assert.match(empty.html, /fixture<\/a> · 4 skills<\/h2>/);
+  assert.equal(summaries(empty.html).length, 4);
+});
+
 test('the input and SKILL.md are text, never markup', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'skill-atlas-web-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));

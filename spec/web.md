@@ -3,10 +3,11 @@
 Local only: it listens on *127.0.0.1*, since it reads local directories.
 ## Page
 - A **field** for the repository: a GitHub URL or a local directory, as in `scan`
-- Submitted: `/?repo=<input>`; a link to a scan is shareable
+- A second **field** for words, filtering as in `scan`; empty: every skill
+- Submitted: `/?repo=<input>&words=<words>`; a link to a scan is shareable
 - Each request scans **afresh**; *nothing is stored*
 ## Result
-- `<owner>/<repo> · N skills`; skills in the order of `scan`
+- `<owner>/<repo> · N skills`, filtered `· N of M skills`; skills in the order of `scan`
 - Each skill: **name**, the description's *first sentence*, the **link**, `also in` for copies
 - Its **SKILL.md**: the whole file, as text, *folded* until opened
 - Warnings: listed under the skills

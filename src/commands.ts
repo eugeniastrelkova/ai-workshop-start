@@ -16,7 +16,9 @@ export type Context = {
 
 const usage = `Usage: skill-atlas <command>
 
-  scan <GitHub URL | directory>   find every SKILL.md in a repository and print it
+  scan <GitHub URL | directory> [<word>...]
+                                  find every SKILL.md in a repository and print it;
+                                  with words, only the skills that contain every one
   serve [--port <port>]           open the web view on 127.0.0.1, port 4321 by default
   help                            show this help`;
 
@@ -37,9 +39,10 @@ export async function run(args: string[], context: Context): Promise<number> {
 }
 
 async function scanCommand(args: string[], context: Context) {
-  if (args.length !== 1) throw new AtlasError('Usage: skill-atlas scan <GitHub URL | directory>');
-  const result = await scan(await context.open(args[0]));
-  printRepository(result.repository, result.skills, context);
+  const [input, ...words] = args;
+  if (!input) throw new AtlasError('Usage: skill-atlas scan <GitHub URL | directory> [<word>...]');
+  const result = await scan(await context.open(input));
+  printRepository(result.repository, result.skills, words, context);
   for (const warning of result.warnings) context.error(`warning: ${warning}`);
 }
 
@@ -51,13 +54,29 @@ async function serveCommand(args: string[], context: Context) {
 }
 
 /** `<owner>/<repo> · N skills`, then each skill's name, first sentence and link. */
-function printRepository(repository: Repository, skills: Skill[], { print }: Context) {
-  print(`${repository.id} · ${skills.length} ${skills.length === 1 ? 'skill' : 'skills'}`);
-  for (const skill of skills) {
+function printRepository(repository: Repository, skills: Skill[], words: string[], { print }: Context) {
+  const shown = filterSkills(skills, words);
+  print(`${repository.id} · ${countSkills(shown, skills, words)}`);
+  for (const skill of shown) {
     print(skill.description ? `${skill.name} — ${firstSentence(skill.description)}` : skill.name);
     print(`  ${skillLink(repository, skill)}`);
     if (skill.copies.length > 0) print(`  also in ${skill.copies.join(', ')}`);
   }
+}
+
+/** The skills whose name or description contains every word, case-insensitive; no words: all. */
+export function filterSkills(skills: Skill[], words: string[]): Skill[] {
+  const wanted = words.map((word) => word.toLowerCase()).filter(Boolean);
+  return skills.filter((skill) => {
+    const text = `${skill.name}\n${skill.description}`.toLowerCase();
+    return wanted.every((word) => text.includes(word));
+  });
+}
+
+/** `N skills`; filtered by words, `N of M skills`. */
+export function countSkills(shown: Skill[], all: Skill[], words: string[]): string {
+  const noun = all.length === 1 ? 'skill' : 'skills';
+  return words.some(Boolean) ? `${shown.length} of ${all.length} ${noun}` : `${shown.length} ${noun}`;
 }
 
 export function firstSentence(text: string): string {

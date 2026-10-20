@@ -1,7 +1,7 @@
 // The web view: one page with a field for the repository, then its skills and their SKILL.md.
 // Each request scans afresh; nothing is stored. Local only: it reads local directories.
 import { createServer, type Server } from 'node:http';
-import { firstSentence } from './commands.ts';
+import { countSkills, filterSkills, firstSentence } from './commands.ts';
 import { AtlasError } from './core/errors.ts';
 import { skillLink, type Skill } from './core/model.ts';
 import { scan, type ScanResult, type Source } from './core/scan.ts';
@@ -27,25 +27,28 @@ export function serve(open: Open, port: number): Promise<{ server: Server; url: 
   });
 }
 
-/** `/`: the field; `/?repo=<input>`: the field, then the scan or why it failed. */
+/** `/`: the fields; `/?repo=<input>&words=<words>`: the fields, then the scan or why it failed. */
 export async function render(url: URL, open: Open): Promise<Page> {
-  if (url.pathname !== '/') return { status: 404, html: layout('Not found', '', '<p class="error">Not found</p>') };
+  if (url.pathname !== '/') return { status: 404, html: layout('Not found', '', '', '<p class="error">Not found</p>') };
   const input = url.searchParams.get('repo')?.trim() ?? '';
-  if (!input) return { status: 200, html: layout('Skill Atlas', '', '') };
+  const words = url.searchParams.get('words') ?? '';
+  if (!input) return { status: 200, html: layout('Skill Atlas', '', words, '') };
   try {
     const result = await scan(await open(input));
-    return { status: 200, html: layout(`${result.repository.id} · Skill Atlas`, input, repository(result)) };
+    const html = repository(result, words.split(/\s+/).filter(Boolean));
+    return { status: 200, html: layout(`${result.repository.id} · Skill Atlas`, input, words, html) };
   } catch (error) {
     const message = error instanceof AtlasError ? error.message : `Unexpected error: ${error instanceof Error ? error.message : String(error)}`;
     const status = error instanceof AtlasError ? 400 : 500;
-    return { status, html: layout('Skill Atlas', input, `<p class="error">${escape(message)}</p>`) };
+    return { status, html: layout('Skill Atlas', input, words, `<p class="error">${escape(message)}</p>`) };
   }
 }
 
 /** `<owner>/<repo> · N skills`, each skill folded over its SKILL.md, then the warnings. */
-function repository({ repository, skills, warnings }: ScanResult): string {
-  const count = `${skills.length} ${skills.length === 1 ? 'skill' : 'skills'}`;
-  const list = skills.map((skill) => skillItem(skill, skillLink(repository, skill))).join('\n');
+function repository({ repository, skills, warnings }: ScanResult, words: string[]): string {
+  const shown = filterSkills(skills, words);
+  const count = countSkills(shown, skills, words);
+  const list = shown.map((skill) => skillItem(skill, skillLink(repository, skill))).join('\n');
   const warned = warnings.length
     ? `<ul class="warnings">${warnings.map((warning) => `<li>warning: ${escape(warning)}</li>`).join('')}</ul>`
     : '';
@@ -69,7 +72,7 @@ ${copies}
 </li>`;
 }
 
-function layout(title: string, input: string, body: string): string {
+function layout(title: string, input: string, words: string, body: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -110,10 +113,11 @@ form {
   border: 1px solid var(--border); border-radius: 999px; box-shadow: var(--shadow);
 }
 form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); }
-input[name=repo] {
+input[name=repo], input[name=words] {
   flex: 1; min-width: 0; padding: .5rem 1rem; border: 0; outline: 0; background: transparent;
   color: inherit; font: inherit;
 }
+input[name=words] { flex: 0 1 12rem; border-left: 1px solid var(--border); }
 button {
   padding: .5rem 1.25rem; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-text);
   font: inherit; font-weight: 600; cursor: pointer; transition: filter .15s;
@@ -157,6 +161,7 @@ pre {
 <p class="tagline">Every agent skill in a repository, with its SKILL.md.</p>
 <form method="get" action="/">
 <input name="repo" value="${escape(input)}" placeholder="https://github.com/owner/repo or a local directory" aria-label="Repository" autofocus>
+<input name="words" value="${escape(words)}" placeholder="Words to filter by" aria-label="Words">
 <button type="submit">Scan</button>
 </form>
 ${body}
