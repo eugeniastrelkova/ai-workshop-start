@@ -3,6 +3,8 @@
 import { expect, test } from './demo.ts';
 
 test('organization scan', async ({ page, demo }) => {
+  // CI's own token runs out of code search (429); a personal one, the E2E_GITHUB_TOKEN secret, does not.
+  test.skip(!!process.env.CI && !process.env.GITHUB_TOKEN, 'real GitHub: on CI, only with the E2E_GITHUB_TOKEN secret');
   await page.goto('/');
   await demo.caption('Organization scan: every repository of JetBrains with a skill');
   await demo.type('input[name=repo]', 'https://github.com/JetBrains');

@@ -66,6 +66,8 @@ GITHUB_TOKEN=$(gh auth token) DEMO=docs/demo npm run e2e -- filter.spec.ts   # o
   request and keeps the recordings, pass or fail: the `e2e-recordings` artifact of the run
   (`test-results/`: each test's video, and of a failure its trace and screenshot diffs;
   `playwright-report/`: the HTML report). `gh run download <run-id> -n e2e-recordings`.
+  `org.spec.ts` runs there only with the `E2E_GITHUB_TOKEN` repository secret, a personal token:
+  CI's own token runs out of code search (`GitHub answered 429 … search/code`); without it, skipped.
 
 ## Screenshots
 
