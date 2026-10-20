@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
-import { openGitHub } from '../src/core/github.ts';
+import { openGitHub, type Fetch } from '../src/core/github.ts';
 import { parseSkill } from '../src/core/parse.ts';
 import { replay } from '../src/core/replay.ts';
 import { atlas, CLI, EXAMPLE_COMMIT, FIXTURE, github, KOTLIN_COMMIT, opener } from './helpers.ts';
@@ -137,16 +137,33 @@ test('unreachable repository → a clear message, exit code 1', async () => {
   assert.match(offline.stderr, /^Cannot reach GitHub: not recorded: https:\/\/api\.github\.com\/repos\/JetBrains\/not-answered$/);
 });
 
-test('rate limit → a message that asks for GITHUB_TOKEN', async () => {
-  const limited = replay({
-    'https://api.github.com/repos/JetBrains/MPS': {
-      status: 403,
-      body: { message: 'API rate limit exceeded for 192.0.2.1. (But here is the good news: ...)' },
-    },
+/** GitHub's answer once the requests are used up: no more until 13:45 UTC. */
+const RATE_LIMITED = {
+  status: 403,
+  body: { message: 'API rate limit exceeded for 192.0.2.1. (But here is the good news: ...)' },
+  headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1792503900', 'x-ratelimit-resource': 'core' },
+};
+
+test('rate limit → when it resets, and GITHUB_TOKEN', async () => {
+  const limited = opener({ fetch: replay({ 'https://api.github.com/repos/JetBrains/MPS': RATE_LIMITED }) });
+  const scanned = await atlas(['scan', 'https://github.com/JetBrains/MPS'], { open: limited });
+  assert.equal(scanned.code, 1);
+  assert.equal(scanned.stdout, '');
+  assert.equal(scanned.stderr, 'GitHub rate limit reached; set GITHUB_TOKEN, or try again after 13:45 UTC');
+
+  const withToken = opener({ fetch: replay({ 'https://api.github.com/repos/JetBrains/MPS': RATE_LIMITED }), token: 'test' });
+  assert.equal((await atlas(['scan', 'https://github.com/JetBrains/MPS'], { open: withToken })).stderr, 'GitHub rate limit reached; try again after 13:45 UTC');
+});
+
+test('rate limit, no reset in the answer → GITHUB_TOKEN, or a minute with one', async () => {
+  const secondary = replay({
+    'https://api.github.com/repos/JetBrains/MPS': { status: 403, body: { message: 'You have exceeded a secondary rate limit.' } },
   });
-  await assert.rejects(openGitHub('https://github.com/JetBrains/MPS', { fetch: limited }), {
-    message: 'GitHub rate limit reached; set GITHUB_TOKEN',
-  });
+  const scanned = await atlas(['scan', 'https://github.com/JetBrains/MPS'], { open: opener({ fetch: secondary }) });
+  assert.equal(scanned.code, 1);
+  assert.equal(scanned.stderr, 'GitHub rate limit reached; set GITHUB_TOKEN');
+  const withToken = await atlas(['scan', 'https://github.com/JetBrains/MPS'], { open: opener({ fetch: secondary, token: 'test' }) });
+  assert.equal(withToken.stderr, 'GitHub rate limit reached; try again in a minute');
 });
 
 test('an organization: each repository with skills, sorted, after a blank line; warnings name the repository', async () => {
@@ -240,6 +257,46 @@ test('an organization: the rate limit ends the scan, exit code 1', async () => {
   assert.equal(organization.code, 1);
   assert.equal(organization.stdout, '');
   assert.equal(organization.stderr, 'GitHub rate limit reached; try again in a minute');
+});
+
+/** GitHub, answering from EXAMPLE, with the requests left told on `url`; every URL asked is kept. */
+function left(url: string, remaining: number, resource = 'core') {
+  const asked: string[] = [];
+  const headers = { 'x-ratelimit-remaining': String(remaining), 'x-ratelimit-reset': '1792503900', 'x-ratelimit-resource': resource };
+  const fetch: Fetch = async (request, init) => {
+    asked.push(request);
+    const response = await github(request, init);
+    return request === url ? new Response(await response.text(), { status: response.status, headers }) : response;
+  };
+  return { fetch, asked };
+}
+
+test('an organization without GITHUB_TOKEN, too few requests left → the scan ends before it starts', async () => {
+  // One repository listed, JetBrains/example: at least 2 requests, 1 left.
+  const { fetch, asked } = left('https://api.github.com/users/JetBrains/repos?per_page=100&page=1', 1);
+  const organization = await atlas(['scan', 'https://github.com/JetBrains'], { open: opener({ fetch }) });
+  assert.equal(organization.code, 1);
+  assert.equal(organization.stdout, '');
+  assert.equal(organization.stderr, 'GitHub rate limit too low: 1 repository needs at least 2 requests, 1 left until 13:45 UTC; set GITHUB_TOKEN');
+  assert.deepEqual(asked, ['https://api.github.com/users/JetBrains', 'https://api.github.com/users/JetBrains/repos?per_page=100&page=1']);
+
+  // 2 left: enough to start.
+  const enough = await atlas(['scan', 'https://github.com/JetBrains'], { open: opener(left('https://api.github.com/users/JetBrains/repos?per_page=100&page=1', 2)) });
+  assert.equal(enough.code, 0, enough.stderr);
+  assert.equal(enough.stdout.split('\n')[0], 'JetBrains · 1 skill in 1 repository');
+});
+
+test('an organization with GITHUB_TOKEN, too few requests left → the scan ends before it starts', async () => {
+  // Code search finds 3 repositories with a project skill: example, kotlin and gone; 6 requests, 5 left.
+  const { fetch } = left('https://api.github.com/users/JetBrains', 5);
+  const organization = await atlas(['scan', 'https://github.com/JetBrains'], { open: opener({ fetch, token: 'test' }) });
+  assert.equal(organization.code, 1);
+  assert.equal(organization.stderr, 'GitHub rate limit too low: 3 repositories need at least 6 requests, 5 left until 13:45 UTC');
+
+  // What is left of code search is counted apart: it does not stop the scan.
+  const search = left('https://api.github.com/search/code?q=filename:SKILL.md+org:JetBrains&per_page=100&page=1', 0, 'code_search');
+  const scanned = await atlas(['scan', 'https://github.com/JetBrains'], { open: opener({ ...search, token: 'test' }) });
+  assert.equal(scanned.code, 0, scanned.stderr);
 });
 
 test('unknown organization → a clear message, exit code 1', async () => {

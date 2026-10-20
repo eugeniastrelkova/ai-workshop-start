@@ -12,6 +12,9 @@ Skill: id = `repo:path`, name, description, commit, text (the whole SKILL.md)
 - The link pins the *scanned commit*
 - Malformed front matter → a *warning*, the scan goes on
 - Unreachable repository → a clear message, exit code 1
+- **Rate limit** → when it resets, from GitHub's answer: `GitHub rate limit reached; set GITHUB_TOKEN, or try again after 13:45 UTC`
+  - With `GITHUB_TOKEN`: `GitHub rate limit reached; try again after 13:45 UTC`
+  - No reset in the answer (a secondary limit): `…; set GITHUB_TOKEN`, with a token `…; try again in a minute`
 ## Project skill
 `<subproject>/<agents' folder>/<name>/SKILL.md`; the subproject is optional
 - Agents' folders, in this order: `.agents/skills`, `.claude/skills`, `.github/skills`, `agent/skills`
@@ -31,6 +34,9 @@ Skill: id = `repo:path`, name, description, commit, text (the whole SKILL.md)
 - More than 1000 files for the code search → only the first 1000, with a warning
 - A repository that fails → a *warning* naming it, the scan goes on
 - Rate limit, a rejected token → the scan ends, exit code 1
+- **Too few requests left** for the repositories found, *at least 2* each → the scan ends *before it starts*, exit code 1
+  - `GitHub rate limit too low: 812 repositories need at least 1624 requests, 51 left until 13:45 UTC; set GITHUB_TOKEN`
+  - With `GITHUB_TOKEN`: without `; set GITHUB_TOKEN`. GitHub not saying what is left → no check
 - Unknown owner → a clear message, exit code 1
 ## Listing
 - GitHub, with `GITHUB_TOKEN`: code search over the whole default branch

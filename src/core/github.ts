@@ -48,6 +48,7 @@ export async function openGitHubOwner(input: string, options: GitHubOptions): Pr
   const repositories = options.token
     ? await searchRepositories(github, `${type === 'Organization' ? 'org' : 'user'}:${login}`, warnings)
     : await listRepositories(github, login);
+  github.afford(repositories.length);
   return {
     id: login,
     url: `https://github.com/${login}`,
@@ -167,6 +168,21 @@ function client({ fetch, token }: GitHubOptions) {
   const headers: Record<string, string> = { Accept: 'application/vnd.github+json' };
   if (token) headers.Authorization = `Bearer ${token}`;
   const answers = new Map<string, Promise<unknown>>(); // the root tree is asked for once per skill root
+  let left: { remaining: number; reset: number } | undefined; // of the core API, as its last answer told
+
+  /** What to do: set GITHUB_TOKEN, or wait until the reset when GitHub tells it; a secondary limit does not. */
+  function advice(reset?: number): string {
+    const after = reset === undefined ? undefined : `try again after ${utc(reset)}`;
+    if (token) return `; ${after ?? 'try again in a minute'}`;
+    return after ? `; set GITHUB_TOKEN, or ${after}` : '; set GITHUB_TOKEN';
+  }
+
+  function remember(response: Response) {
+    const remaining = Number(response.headers.get('x-ratelimit-remaining') ?? NaN);
+    const reset = Number(response.headers.get('x-ratelimit-reset') ?? NaN);
+    const resource = response.headers.get('x-ratelimit-resource') ?? 'core'; // code search is counted apart
+    if (resource === 'core' && Number.isInteger(remaining) && Number.isInteger(reset)) left = { remaining, reset };
+  }
 
   async function get(url: string, init?: { headers: Record<string, string> }): Promise<Response> {
     try {
@@ -178,13 +194,14 @@ function client({ fetch, token }: GitHubOptions) {
 
   async function request(url: string, notFound: string): Promise<unknown> {
     const response = await get(url, { headers });
+    remember(response);
     if (response.ok) return response.json();
     const body: unknown = await response.json().catch(() => undefined);
     const message = (body as { message?: unknown } | undefined)?.message;
     const text = typeof message === 'string' ? message : '';
     if (response.status === 404) throw new AtlasError(notFound);
     if ((response.status === 403 || response.status === 429) && /rate limit/i.test(text)) {
-      throw new LimitError(`GitHub rate limit reached; ${token ? 'try again in a minute' : 'set GITHUB_TOKEN'}`);
+      throw new LimitError(`GitHub rate limit reached${advice(left?.remaining === 0 ? left.reset : undefined)}`);
     }
     if (response.status === 401) throw new LimitError('GitHub rejected the token in GITHUB_TOKEN');
     throw new AtlasError(`GitHub answered ${response.status} for ${url}${text && `: ${text}`}`);
@@ -192,6 +209,13 @@ function client({ fetch, token }: GitHubOptions) {
 
   return {
     token,
+    /** Ends the scan before it starts when GitHub said fewer requests are left than the repositories take, 2 each at least. */
+    afford(repositories: number) {
+      const needed = 2 * repositories;
+      if (!left || left.remaining >= needed) return;
+      const counted = `${repositories} ${repositories === 1 ? 'repository needs' : 'repositories need'} at least ${needed} requests`;
+      throw new LimitError(`GitHub rate limit too low: ${counted}, ${left.remaining} left until ${utc(left.reset)}${token ? '' : '; set GITHUB_TOKEN'}`);
+    },
     /** A GitHub API answer; `notFound` explains a 404. */
     json<T>(url: string, notFound = `Not found on GitHub: ${url}`): Promise<T> {
       if (!answers.has(url)) answers.set(url, request(url, notFound));
@@ -205,6 +229,11 @@ function client({ fetch, token }: GitHubOptions) {
       return new Uint8Array(await response.arrayBuffer());
     },
   };
+}
+
+/** A reset time, in seconds since the epoch: `13:45 UTC`. */
+function utc(seconds: number): string {
+  return `${new Date(seconds * 1000).toISOString().slice(11, 16)} UTC`;
 }
 
 function encodePath(path: string): string {
