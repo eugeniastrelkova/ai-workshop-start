@@ -4,8 +4,8 @@ A **GitHub repository** URL, or a local directory
 ## Output
 Every *project skill* (below): **name**, **description**, **link**
 ## Architecture
-Core: fetch → find → parse. CLI: a *thin client*.
-Skill: id = `repo:path`, name, description, commit
+Core: fetch → find → parse. CLI and web view: *thin clients*.
+Skill: id = `repo:path`, name, description, commit, text (the whole SKILL.md)
 ## Details
 - **GitHub API**, no clone; *under 5 s* for intellij-community
 - The name: front matter, else the directory
