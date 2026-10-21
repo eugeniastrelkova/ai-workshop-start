@@ -14,7 +14,8 @@ export type Page = { status: number; html: string };
 /** Listens on 127.0.0.1; port 0 picks a free one. Resolves to the server and its address. */
 export function serve(open: Open, port: number): Promise<{ server: Server; url: string }> {
   const server = createServer(async (request, response) => {
-    const page = await render(new URL(request.url ?? '/', 'http://127.0.0.1'), open);
+    // No request stops the server: whatever throws becomes a page.
+    const page = await answer(request.url ?? '/', open).catch((error) => failed('', '', error));
     response.writeHead(page.status, { 'Content-Type': 'text/html; charset=utf-8' });
     response.end(page.html);
   });
@@ -30,7 +31,7 @@ export function serve(open: Open, port: number): Promise<{ server: Server; url: 
 
 /** `/`: the fields; `/?repo=<input>&words=<words>`: the fields, then the scan or why it failed. */
 export async function render(url: URL, open: Open): Promise<Page> {
-  if (url.pathname !== '/') return { status: 404, html: layout('Not found', '', '', '<p class="error">Not found</p>') };
+  if (url.pathname !== '/') return notFound();
   const input = url.searchParams.get('repo')?.trim() ?? '';
   const words = url.searchParams.get('words') ?? '';
   if (!input) return { status: 200, html: layout('Skill Atlas', '', words, '') };
@@ -44,10 +45,25 @@ export async function render(url: URL, open: Open): Promise<Page> {
     const result = await scan(opened);
     return { status: 200, html: layout(`${result.repository.id} · Skill Atlas`, input, words, repository(result, filter)) };
   } catch (error) {
-    const message = error instanceof AtlasError ? error.message : `Unexpected error: ${error instanceof Error ? error.message : String(error)}`;
-    const status = error instanceof AtlasError ? 400 : 500;
-    return { status, html: layout('Skill Atlas', input, words, `<p class="error">${escape(message)}</p>`) };
+    return failed(input, words, error);
   }
+}
+
+/** The request target as sent, a path: `//` and `//<host>/` are paths too, never a protocol-relative URL. */
+function answer(target: string, open: Open): Promise<Page> {
+  const url = target.startsWith('/') ? URL.parse(`http://127.0.0.1${target}`) : null;
+  return url ? render(url, open) : Promise.resolve(notFound());
+}
+
+function notFound(): Page {
+  return { status: 404, html: layout('Not found', '', '', '<p class="error">Not found</p>') };
+}
+
+/** An `AtlasError`: its message, status 400; anything else: `Unexpected error: …`, status 500. */
+function failed(input: string, words: string, error: unknown): Page {
+  const message = error instanceof AtlasError ? error.message : `Unexpected error: ${error instanceof Error ? error.message : String(error)}`;
+  const status = error instanceof AtlasError ? 400 : 500;
+  return { status, html: layout('Skill Atlas', input, words, `<p class="error">${escape(message)}</p>`) };
 }
 
 /** `<owner> · N skills in M repositories`, each repository with skills left after the words, then all the warnings. */
