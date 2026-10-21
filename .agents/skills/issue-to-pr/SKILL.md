@@ -17,9 +17,19 @@ curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" \
   https://api.github.com/repos/eugeniastrelkova/ai-workshop-start/issues/<number>
 ```
 
-Restate it as the **cases** it adds — the inputs and the output a user would see. Ask before
-starting only when two readings would mean two different implementations; otherwise write your
-reading into the spec, where the reviewer can see it.
+Restate it as the **cases** it adds — the inputs and the output a user would see. When the issue
+leaves a decision open — two readings would mean two different implementations — ask on the issue,
+not in the session, then wait for the answer and go on with it. Otherwise write your reading into
+the spec, where the reviewer can see it.
+
+```console
+gh issue comment <number> --body "<the question, with the options>"
+gh issue view <number> --comments          # every few minutes, until it is answered
+```
+
+Without `gh`, `POST` to `/repos/eugeniastrelkova/ai-workshop-start/issues/<number>/comments` and
+`GET` the same URL with `curl` and `$GITHUB_TOKEN`. Do not branch or write the spec until it is
+answered.
 
 Then branch off an up-to-date `main`: `git switch -c spec/<short-name>`. Never commit to `main`.
 
