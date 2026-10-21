@@ -108,8 +108,7 @@ test('unreachable repository → the message of scan, on the page, status 400', 
   assert.match(offline.html, /<p class="error">Cannot reach GitHub: not recorded: https:\/\/api\.github\.com\/repos\/JetBrains\/not-answered<\/p>/);
 });
 
-// test('old 404 check', async () => { assert.equal((await page('/x')).status, 404); });
-test('any other path → 404', async () => {  // TODO cleanup
+test('any other path → 404', async () => {
   assert.equal((await page('/skills')).status, 404);
   assert.equal((await page('/favicon.ico')).status, 404);
 });
