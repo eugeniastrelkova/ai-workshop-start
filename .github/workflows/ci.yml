@@ -38,7 +38,8 @@ jobs:
   # moments must match tests/e2e/screenshots/ to the pixel. Every run keeps its recordings.
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # A cold build of the image alone takes about 11 minutes (its packages come from snapshot.ubuntu.com).
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -46,6 +47,24 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # The image, built once per tag and kept in the Actions cache: only a Playwright update or an edit
+      # to the Dockerfile pays the cold build. On a hit, scripts/e2e.sh finds the loaded image and skips it.
+      - id: image
+        run: echo "tag=$(scripts/e2e.sh --tag)" >> "$GITHUB_OUTPUT"
+      - id: cache
+        uses: actions/cache/restore@v6
+        with:
+          path: /tmp/e2e-image.tar
+          key: e2e-image-${{ steps.image.outputs.tag }}
+      - if: steps.cache.outputs.cache-hit == 'true'
+        run: docker load -i /tmp/e2e-image.tar
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: scripts/e2e.sh --build && docker save -o /tmp/e2e-image.tar "${{ steps.image.outputs.tag }}"
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: /tmp/e2e-image.tar
+          key: e2e-image-${{ steps.image.outputs.tag }}
       - run: npm run e2e
       # The videos of each test, and of a failure its trace and the screenshot diffs; the HTML report.
       - uses: actions/upload-artifact@v7

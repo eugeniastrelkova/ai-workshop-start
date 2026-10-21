@@ -1,6 +1,7 @@
 #!/bin/sh
 # npm run e2e [-- <playwright test options>]: the UI e2e tests, in the image of tests/e2e/Dockerfile,
 # so that the screenshots match the baselines wherever they run (the cloud, CI). Needs Docker.
+# scripts/e2e.sh --tag prints the image's tag; scripts/e2e.sh --build only builds it (CI caches it by tag).
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -15,6 +16,7 @@ eval "$(node -e '
 ')"
 export PLAYWRIGHT_VERSION CHROMIUM_REVISION CHROMIUM_VERSION FFMPEG_REVISION
 image="skill-atlas-e2e:$PLAYWRIGHT_VERSION-$CHROMIUM_REVISION-$FFMPEG_REVISION-$(sha256sum tests/e2e/Dockerfile | cut -c1-12)"
+[ "${1-}" = --tag ] && { echo "$image"; exit 0; }
 
 if [ -z "$(docker images -q "$image")" ]; then
   echo "e2e: building $image" >&2
@@ -25,6 +27,7 @@ if [ -z "$(docker images -q "$image")" ]; then
     --build-arg https_proxy --build-arg http_proxy --build-arg no_proxy \
     tests/e2e >&2
 fi
+[ "${1-}" = --build ] && exit 0
 
 tty=; [ -t 1 ] && tty=-t
 # The checkout always at /skill-atlas: a local repository's links are absolute paths, on the page.

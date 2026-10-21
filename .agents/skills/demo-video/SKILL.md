@@ -47,7 +47,9 @@ and Docker. The first `npm run e2e` builds the image (a few minutes), tagged wit
 Chromium and ffmpeg versions of `node_modules/playwright-core/browsers.json` and a hash of the
 Dockerfile: a Playwright update or an edit to the Dockerfile builds it again. Its two `FROM` bases
 are pinned by digest and its packages come from one Ubuntu snapshot (`APT::Snapshot`), so a rebuild
-gives the same image until someone changes a digest or the snapshot date on purpose.
+gives the same image until someone changes a digest or the snapshot date on purpose. CI builds it
+once per tag (`scripts/e2e.sh --build`) and keeps it in the Actions cache under that tag
+(`scripts/e2e.sh --tag`), so only a run after such a change pays the cold build (about 11 minutes).
 Chromium comes straight from Chrome for Testing, which the Playwright CDN mirrors (the CDN is
 blocked in some clouds: `403 Blocked by network policy`); ffmpeg, from Ubuntu.
 
