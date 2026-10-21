@@ -6,13 +6,11 @@ import { openGitHub, openGitHubOwner, parseGitHubOwner, parseGitHubUrl } from '.
 import { openDirectory } from './local.ts';
 import { serve } from './web.ts';
 
-const token = process.env.GITHUB_TOKEN || undefined;
-
 const open = (input: string) =>
   parseGitHubUrl(input)
-    ? openGitHub(input, { fetch, token })
+    ? openGitHub(input, { fetch })
     : parseGitHubOwner(input)
-      ? openGitHubOwner(input, { fetch, token })
+      ? openGitHubOwner(input, { fetch })
       : openDirectory(input);
 
 process.exitCode = await run(process.argv.slice(2), {

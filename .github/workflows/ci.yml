@@ -47,10 +47,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run e2e
-        env:
-          # The organization scan, on real GitHub, needs a personal token: CI's own runs out of code
-          # search (429). Without the secret, that test is skipped.
-          GITHUB_TOKEN: ${{ secrets.E2E_GITHUB_TOKEN }}
       # The videos of each test, and of a failure its trace and the screenshot diffs; the HTML report.
       - uses: actions/upload-artifact@v7
         if: always()

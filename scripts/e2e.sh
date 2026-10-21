@@ -29,5 +29,5 @@ tty=; [ -t 1 ] && tty=-t
 # The checkout always at /skill-atlas: a local repository's links are absolute paths, on the page.
 exec docker run --rm $tty --init --ipc=host --network host -u "$(id -u):$(id -g)" -e HOME=/tmp \
   -v "$PWD:/skill-atlas" -w /skill-atlas \
-  -e NPM_CONFIG_UPDATE_NOTIFIER=false -e CI -e DEMO -e GITHUB_TOKEN -e HTTPS_PROXY -e HTTP_PROXY -e NO_PROXY -e https_proxy -e http_proxy -e no_proxy \
+  -e NPM_CONFIG_UPDATE_NOTIFIER=false -e CI -e DEMO -e HTTPS_PROXY -e HTTP_PROXY -e NO_PROXY -e https_proxy -e http_proxy -e no_proxy \
   "$image" npx playwright test "$@"

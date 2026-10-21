@@ -1,10 +1,10 @@
 // An organization, on the page (spec/web.md): each of its repositories with skills, then filtered.
-// Real GitHub: set GITHUB_TOKEN, or JetBrains runs out of the 60 requests an hour.
+// Real GitHub, asked anonymously: JetBrains can run out of the 60 requests an hour.
 import { expect, test } from './demo.ts';
 
 test('organization scan', async ({ page, demo }) => {
-  // CI's own token runs out of code search (429); a personal one, the E2E_GITHUB_TOKEN secret, does not.
-  test.skip(!!process.env.CI && !process.env.GITHUB_TOKEN, 'real GitHub: on CI, only with the E2E_GITHUB_TOKEN secret');
+  // On CI, the 60 requests an hour are shared with every other job on the runner's address.
+  test.skip(!!process.env.CI, 'real GitHub, asked anonymously: not on CI');
   await page.goto('/');
   await demo.caption('Organization scan: every repository of JetBrains with a skill');
   await demo.type('input[name=repo]', 'https://github.com/JetBrains');

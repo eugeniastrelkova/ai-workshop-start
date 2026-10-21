@@ -51,23 +51,23 @@ builds it again. Chromium comes straight from Chrome for Testing, which the Play
 ## Record
 
 ```console
-GITHUB_TOKEN=$(gh auth token) DEMO=docs/demo npm run e2e                     # all of them
-GITHUB_TOKEN=$(gh auth token) DEMO=docs/demo npm run e2e -- filter.spec.ts   # one
+DEMO=docs/demo npm run e2e                     # all of them
+DEMO=docs/demo npm run e2e -- filter.spec.ts   # one
 ```
 
 - `DEMO=<directory>`: each **passing** test's video saved there as `<title>.webm`. A failing
   test saves none there; its video and a trace of the error stay in `test-results/`, to see why.
 - Without `DEMO`, the videos stay in `test-results/` only (ignored by git).
-- `GITHUB_TOKEN` for a test on real GitHub: an organization scan without it lists every repository
-  and runs out of the 60 requests an hour.
+- A test on real GitHub asks it anonymously, as `scan` does: 60 requests an hour. An organization
+  scan can run out of them; wait for the hour, the message on the page says until when.
 - Behind an HTTP proxy, Node's `fetch` needs `NODE_USE_ENV_PROXY=1`; the config sets it for the
   server. `EAI_AGAIN` in the page means that is missing.
 - On CI, the `e2e` job of `.github/workflows/ci.yml` runs `npm run e2e` on every push and pull
   request and keeps the recordings, pass or fail: the `e2e-recordings` artifact of the run
   (`test-results/`: each test's video, and of a failure its trace and screenshot diffs;
   `playwright-report/`: the HTML report). `gh run download <run-id> -n e2e-recordings`.
-  `org.spec.ts` runs there only with the `E2E_GITHUB_TOKEN` repository secret, a personal token:
-  CI's own token runs out of code search (`GitHub answered 429 … search/code`); without it, skipped.
+  `org.spec.ts` is skipped there: on real GitHub, anonymously, the runner's 60 requests an hour are
+  shared with every other job on its address.
 
 ## Screenshots
 

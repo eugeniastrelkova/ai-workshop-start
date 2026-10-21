@@ -94,16 +94,22 @@ test('an organization: the owner, then each repository with skills, then the war
   );
 });
 
-test('the browser terminal scans an organization too, without a token', async () => {
+test('the browser terminal scans an organization too', async () => {
   const browser = createBrowserBackend({ fetch: github });
   assert.equal(
     await browser.run('$ skill-atlas scan https://github.com/JetBrains'),
     [
-      'JetBrains · 1 skill in 1 repository',
+      'JetBrains · 2 skills in 2 repositories',
       '',
       'JetBrains/example · 1 skill',
       'commits — Write commit messages the way this repository does.',
       `  https://github.com/JetBrains/example/blob/${EXAMPLE_COMMIT}/.claude/skills/commits/SKILL.md`,
+      '',
+      'JetBrains/kotlin · 1 skill',
+      'build',
+      `  https://github.com/JetBrains/kotlin/blob/${KOTLIN_COMMIT}/.agents/skills/build/SKILL.md`,
+      'warning: JetBrains/gone: Repository not found: https://github.com/JetBrains/gone; skipped',
+      'warning: JetBrains/kotlin: .agents/skills/build/SKILL.md: no front matter; using the directory name',
     ].join('\n'),
   );
 });
