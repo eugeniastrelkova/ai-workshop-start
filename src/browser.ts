@@ -1,5 +1,4 @@
-// The browser entry: the same commands, printed into the page, over live GitHub without a
-// token. No Node APIs here.
+// The browser entry: the same commands, printed into the page, over live GitHub. No Node APIs here.
 import { run } from './commands.ts';
 import { openGitHub, openGitHubOwner, parseGitHubOwner, type Fetch } from './core/github.ts';
 

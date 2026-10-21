@@ -1,5 +1,5 @@
 // An organization, on the page (spec/web.md): each of its repositories with skills, then filtered.
-// Real GitHub: set GITHUB_TOKEN, or JetBrains runs out of the 60 requests an hour.
+// Real GitHub, asked anonymously: JetBrains can run out of the 60 requests an hour.
 import { expect, test } from './demo.ts';
 
 test('organization scan', async ({ page, demo }) => {

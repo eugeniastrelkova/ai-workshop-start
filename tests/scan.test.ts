@@ -144,26 +144,21 @@ const RATE_LIMITED = {
   headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1792503900', 'x-ratelimit-resource': 'core' },
 };
 
-test('rate limit → when it resets, and GITHUB_TOKEN', async () => {
+test('rate limit → when it resets', async () => {
   const limited = opener({ fetch: replay({ 'https://api.github.com/repos/JetBrains/MPS': RATE_LIMITED }) });
   const scanned = await atlas(['scan', 'https://github.com/JetBrains/MPS'], { open: limited });
   assert.equal(scanned.code, 1);
   assert.equal(scanned.stdout, '');
-  assert.equal(scanned.stderr, 'GitHub rate limit reached; set GITHUB_TOKEN, or try again after 13:45 UTC');
-
-  const withToken = opener({ fetch: replay({ 'https://api.github.com/repos/JetBrains/MPS': RATE_LIMITED }), token: 'test' });
-  assert.equal((await atlas(['scan', 'https://github.com/JetBrains/MPS'], { open: withToken })).stderr, 'GitHub rate limit reached; try again after 13:45 UTC');
+  assert.equal(scanned.stderr, 'GitHub rate limit reached; try again after 13:45 UTC');
 });
 
-test('rate limit, no reset in the answer → GITHUB_TOKEN, or a minute with one', async () => {
+test('rate limit, no reset in the answer → a minute', async () => {
   const secondary = replay({
     'https://api.github.com/repos/JetBrains/MPS': { status: 403, body: { message: 'You have exceeded a secondary rate limit.' } },
   });
   const scanned = await atlas(['scan', 'https://github.com/JetBrains/MPS'], { open: opener({ fetch: secondary }) });
   assert.equal(scanned.code, 1);
-  assert.equal(scanned.stderr, 'GitHub rate limit reached; set GITHUB_TOKEN');
-  const withToken = await atlas(['scan', 'https://github.com/JetBrains/MPS'], { open: opener({ fetch: secondary, token: 'test' }) });
-  assert.equal(withToken.stderr, 'GitHub rate limit reached; try again in a minute');
+  assert.equal(scanned.stderr, 'GitHub rate limit reached; try again in a minute');
 });
 
 test('an organization: each repository with skills, sorted, after a blank line; warnings name the repository', async () => {
@@ -183,7 +178,7 @@ test('an organization: each repository with skills, sorted, after a blank line; 
       `  https://github.com/JetBrains/kotlin/blob/${KOTLIN_COMMIT}/.agents/skills/build/SKILL.md`,
     ].join('\n'),
   );
-  // JetBrains/docs has no project skill: it is not opened, nor listed.
+  // JetBrains/forked and JetBrains/empty are left out by listing; JetBrains/gone is listed but no longer there.
   assert.equal(
     organization.stderr,
     [
@@ -214,46 +209,12 @@ test('an organization with words: only the repositories with a match, counted `N
   assert.equal(none.stdout, 'JetBrains · 0 of 2 skills in 0 repositories');
 });
 
-test('an organization without GITHUB_TOKEN: its repositories listed, forks and empty ones skipped', async () => {
-  // JetBrains/forked and JetBrains/empty are not recorded: opening either would be a warning.
-  const organization = await atlas(['scan', 'github.com/JetBrains/'], { open: opener({ fetch: github }) });
-  assert.equal(organization.code, 0, organization.stderr);
-  assert.equal(
-    organization.stdout,
-    [
-      'JetBrains · 1 skill in 1 repository',
-      '',
-      'JetBrains/example · 1 skill',
-      'commits — Write commit messages the way this repository does.',
-      `  https://github.com/JetBrains/example/blob/${EXAMPLE_COMMIT}/.claude/skills/commits/SKILL.md`,
-    ].join('\n'),
-  );
-  assert.equal(organization.stderr, '');
-});
-
-test('an organization with more than 1000 files for the code search → the first 1000 and a warning', async () => {
-  const pages = Object.fromEntries(
-    Array.from({ length: 10 }, (_, page) => [
-      `https://api.github.com/search/code?q=filename:SKILL.md+user:big&per_page=100&page=${page + 1}`,
-      {
-        status: 200,
-        body: { total_count: 1234, items: Array.from({ length: 100 }, (_, i) => ({ path: `docs/${page * 100 + i}/SKILL.md`, repository: { full_name: 'big/docs' } })) },
-      },
-    ]),
-  );
-  const big = replay({ 'https://api.github.com/users/big': { status: 200, body: { login: 'big', type: 'User' } }, ...pages });
-  const organization = await atlas(['scan', 'https://github.com/big'], { open: opener({ fetch: big, token: 'test' }) });
-  assert.equal(organization.code, 0, organization.stderr);
-  assert.equal(organization.stdout, 'big · 0 skills in 0 repositories');
-  assert.equal(organization.stderr, 'warning: code search lists at most 1000 SKILL.md files; 234 more not looked at');
-});
-
 test('an organization: the rate limit ends the scan, exit code 1', async () => {
   const limited = replay(
-    { 'https://api.github.com/repos/JetBrains/kotlin': { status: 403, body: { message: 'API rate limit exceeded for user ID 1.' } } },
+    { 'https://api.github.com/repos/JetBrains/kotlin/commits/master': { status: 403, body: { message: 'API rate limit exceeded for user ID 1.' } } },
     github,
   );
-  const organization = await atlas(['scan', 'https://github.com/JetBrains'], { open: opener({ fetch: limited, token: 'test' }) });
+  const organization = await atlas(['scan', 'https://github.com/JetBrains'], { open: opener({ fetch: limited }) });
   assert.equal(organization.code, 1);
   assert.equal(organization.stdout, '');
   assert.equal(organization.stderr, 'GitHub rate limit reached; try again in a minute');
@@ -271,31 +232,23 @@ function left(url: string, remaining: number, resource = 'core') {
   return { fetch, asked };
 }
 
-test('an organization without GITHUB_TOKEN, too few requests left → the scan ends before it starts', async () => {
-  // One repository listed, JetBrains/example: at least 2 requests, 1 left.
-  const { fetch, asked } = left('https://api.github.com/users/JetBrains/repos?per_page=100&page=1', 1);
+test('an organization, too few requests left → the scan ends before it starts', async () => {
+  // Three repositories listed: example, kotlin and gone; at least 6 requests, 5 left.
+  const { fetch, asked } = left('https://api.github.com/users/JetBrains/repos?per_page=100&page=1', 5);
   const organization = await atlas(['scan', 'https://github.com/JetBrains'], { open: opener({ fetch }) });
   assert.equal(organization.code, 1);
   assert.equal(organization.stdout, '');
-  assert.equal(organization.stderr, 'GitHub rate limit too low: 1 repository needs at least 2 requests, 1 left until 13:45 UTC; set GITHUB_TOKEN');
+  assert.equal(organization.stderr, 'GitHub rate limit too low: 3 repositories need at least 6 requests, 5 left until 13:45 UTC');
   assert.deepEqual(asked, ['https://api.github.com/users/JetBrains', 'https://api.github.com/users/JetBrains/repos?per_page=100&page=1']);
 
-  // 2 left: enough to start.
-  const enough = await atlas(['scan', 'https://github.com/JetBrains'], { open: opener(left('https://api.github.com/users/JetBrains/repos?per_page=100&page=1', 2)) });
+  // 6 left: enough to start.
+  const enough = await atlas(['scan', 'https://github.com/JetBrains'], { open: opener(left('https://api.github.com/users/JetBrains/repos?per_page=100&page=1', 6)) });
   assert.equal(enough.code, 0, enough.stderr);
-  assert.equal(enough.stdout.split('\n')[0], 'JetBrains · 1 skill in 1 repository');
-});
+  assert.equal(enough.stdout.split('\n')[0], 'JetBrains · 2 skills in 2 repositories');
 
-test('an organization with GITHUB_TOKEN, too few requests left → the scan ends before it starts', async () => {
-  // Code search finds 3 repositories with a project skill: example, kotlin and gone; 6 requests, 5 left.
-  const { fetch } = left('https://api.github.com/users/JetBrains', 5);
-  const organization = await atlas(['scan', 'https://github.com/JetBrains'], { open: opener({ fetch, token: 'test' }) });
-  assert.equal(organization.code, 1);
-  assert.equal(organization.stderr, 'GitHub rate limit too low: 3 repositories need at least 6 requests, 5 left until 13:45 UTC');
-
-  // What is left of code search is counted apart: it does not stop the scan.
-  const search = left('https://api.github.com/search/code?q=filename:SKILL.md+org:JetBrains&per_page=100&page=1', 0, 'code_search');
-  const scanned = await atlas(['scan', 'https://github.com/JetBrains'], { open: opener({ ...search, token: 'test' }) });
+  // What is left of another resource is counted apart: it does not stop the scan.
+  const other = left('https://api.github.com/users/JetBrains', 0, 'search');
+  const scanned = await atlas(['scan', 'https://github.com/JetBrains'], { open: opener(other) });
   assert.equal(scanned.code, 0, scanned.stderr);
 });
 
