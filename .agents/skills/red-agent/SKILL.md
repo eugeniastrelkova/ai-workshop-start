@@ -1,6 +1,6 @@
 ---
 name: red-agent
-description: How to attack the Skill Atlas web view as a tester — spec/web.md case by case, then exploratory — and file one GitHub issue per bug it reproduces, as the red agent's GitHub App (a bot), labelled "Delegated to AI", with the steps and a video.
+description: How to attack the Skill Atlas web view as a tester — spec/web.md case by case, then exploratory — and file one GitHub issue per bug it reproduces, as the jetbrains-air[bot], labelled "Delegated to AI", with the steps and a video.
 ---
 
 # Red agent
@@ -10,8 +10,9 @@ view only** — `./skill-atlas serve`, the page at `http://127.0.0.1:4321/` — 
 can reproduce, opens **one issue**: labelled `Delegated to AI`, with the steps and a video of the
 bug. Those issues are what `issue-to-pr` picks up next.
 
-Everything it posts on GitHub is posted **as a bot**: its GitHub App, shown as `<app>[bot]`, never
-as the user whose `gh` is logged in. No App token, no issue: report the bugs instead.
+Everything it posts on GitHub is posted **as a bot**, `jetbrains-air[bot]`, never as a person. It
+is, when the skill runs as an **Air automation**: `gh` there holds the token of the JetBrains Air
+app. In a session, `gh` holds a person's token: hunt and report, but post nothing (see The bot).
 
 Nothing from a run is merged: work on a scratch branch, `git switch -c red-agent/<yyyy-mm-dd>`,
 and never commit to `main`.
@@ -138,28 +139,22 @@ docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/w" -w /w "$(scripts/e2e.sh --ta
 
 ## The bot
 
-A GitHub App, made once by the repository's owner: **Settings → Developer settings → GitHub Apps →
-New GitHub App**, named for the bot (`skill-atlas-red-agent`), no webhook, repository permissions
-**Issues: Read and write** and **Contents: Read and write** (the videos), installed on this
-repository only. Its **App ID**, and a **private key** generated on its page (a `.pem`), go to the
-session or the automation as secrets:
+Before anything that writes to GitHub — the media branch, the issue — check whose token `gh` has,
+without printing it:
 
 ```console
-export RED_AGENT_APP_ID=<App ID>
-export RED_AGENT_APP_KEY="$(cat skill-atlas-red-agent.private-key.pem)"
+case "$(gh auth token)" in
+  ghs_*) gh api /installation/repositories -q '.repositories[].full_name' ;;   # the app: lists this repository
+  *) echo "not the bot: post nothing" ;;
+esac
 ```
 
-[app-token.ts](app-token.ts) trades them for an installation token, valid for an hour. Every `gh`
-call that writes runs with it, so GitHub shows the bot; the user's own login is only for reading:
-
-```console
-export NODE_USE_ENV_PROXY=1                                   # behind a proxy, as for the server
-BOT=$(node .agents/skills/red-agent/app-token.ts)
-GH_TOKEN=$BOT gh api /installation/repositories -q '.repositories[].full_name'   # the check: this repository
-```
-
-A run longer than the hour mints a new one. The key is a secret: never print it, commit it, or
-write it under the checkout.
+- `ghs_…`, and `eugeniastrelkova/ai-workshop-start` listed: the token of the JetBrains Air app,
+  given to an Air automation. Everything below posts as `jetbrains-air[bot]`.
+- Anything else — `ghu_…` (a person, through the app, as in a session), `ghp_…`, `gho_…`: **post
+  nothing**. Do not set another token to get around it. Hunt, record, write each issue's body into
+  `test-results/red-agent/<slug>.md`, and end with the report, saying the issues were not filed
+  because the run was not the bot; the user files them by running the skill as an automation.
 
 ## Put the video on the media branch
 
@@ -178,21 +173,21 @@ docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/w" -w /w "$(scripts/e2e.sh --ta
   test-results/red-agent/red-<slug>.gif
 ```
 
-Both files go up through the contents API, as the bot, with `[skip ci]` so CI does not run for the
+Both files go up through the contents API, as the bot (above), with `[skip ci]` so CI does not run for the
 branch. The first run makes the branch, as an empty commit with nothing of `main` in it:
 
 ```console
 R=repos/eugeniastrelkova/ai-workshop-start
-GH_TOKEN=$BOT gh api $R/git/ref/heads/red-agent-media >/dev/null 2>&1 || {
+gh api $R/git/ref/heads/red-agent-media >/dev/null 2>&1 || {
   tree=$(echo '{"tree":[{"path":"README.md","mode":"100644","type":"blob",
     "content":"Videos of the bugs the red agent filed. Never merged.\n"}]}' |
-    GH_TOKEN=$BOT gh api $R/git/trees --input - -q .sha)
-  commit=$(GH_TOKEN=$BOT gh api $R/git/commits -f message='Media of the red agent [skip ci]' -f tree=$tree -q .sha)
-  GH_TOKEN=$BOT gh api $R/git/refs -f ref=refs/heads/red-agent-media -f sha=$commit
+    gh api $R/git/trees --input - -q .sha)
+  commit=$(gh api $R/git/commits -f message='Media of the red agent [skip ci]' -f tree=$tree -q .sha)
+  gh api $R/git/refs -f ref=refs/heads/red-agent-media -f sha=$commit
 }
 for f in red-<slug>.gif red-<slug>.webm; do
   base64 -w0 test-results/red-agent/$f > test-results/red-agent/$f.b64
-  GH_TOKEN=$BOT gh api -X PUT $R/contents/$f -f branch=red-agent-media \
+  gh api -X PUT $R/contents/$f -f branch=red-agent-media \
     -f message="Video of <slug> [skip ci]" -F content=@test-results/red-agent/$f.b64 -q .content.path
 done
 ```
@@ -241,15 +236,15 @@ Commit `<git rev-parse --short HEAD>`, Node `<node -v>`, Chromium in the e2e ima
 ````
 
 ```console
-GH_TOKEN=$BOT gh issue create --repo eugeniastrelkova/ai-workshop-start \
+gh issue create --repo eugeniastrelkova/ai-workshop-start \
   --label "Delegated to AI" --label bug \
   --title "<page: what goes wrong>" --body-file test-results/red-agent/<slug>.md
-GH_TOKEN=$BOT gh issue view <number> --json author -q .author.login   # the check: <app>[bot]
+gh issue view <number> --json author -q .author.login   # the check: app/jetbrains-air
 ```
 
 The repro test goes in the body so that `issue-to-pr` can drop it into `tests/e2e/` as the first
 failing test; the `atlas:red-agent` marker is how a later run knows it is filed. An issue that shows
-anyone but the bot as its author was filed wrong: close it, and file it again with `GH_TOKEN=$BOT`.
+anyone but the bot as its author was filed wrong: say so in the report, and stop filing.
 
 A bug the page cannot show in a video (a hang, a header): the issue says so under **Video**, and
 nothing goes on the media branch.
