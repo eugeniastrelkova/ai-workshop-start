@@ -34,6 +34,7 @@ and a test at once:
 | --- | --- |
 | `filter.spec.ts` › `filter by words` | `./fixture`: 4 skills, then `commit` (3 of 4), `commit kotlin` (2 of 4), one SKILL.md unfolded |
 | `org.spec.ts` › `organization scan` | cvoya-com, each repository with skills, then filtered by `triage` |
+| `unreadable.spec.ts` › `unreadable directory` | A local repository with an unreadable folder: 1 skill, the folder as a warning |
 
 For a new change, extend the test that covers it or add one beside them.
 

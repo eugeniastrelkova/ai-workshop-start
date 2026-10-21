@@ -2,7 +2,7 @@
 // repository answered in tests/helpers.ts.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -181,6 +181,23 @@ test('unreachable repository → the message of scan, on the page, status 400', 
   const offline = await page(`/?repo=${encodeURIComponent('https://github.com/JetBrains/not-answered')}`);
   assert.equal(offline.status, 400);
   assert.match(offline.html, /<p class="error">Cannot reach GitHub: not recorded: https:\/\/api\.github\.com\/repos\/JetBrains\/not-answered<\/p>/);
+});
+
+test('a directory that cannot be read → its skills on the page, the directory as a warning', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'skill-atlas-web-'));
+  const repo = join(root, 'r');
+  t.after(() => {
+    chmodSync(join(repo, 'build/private'), 0o755);
+    rmSync(root, { recursive: true, force: true });
+  });
+  cpSync(join(FIXTURE, '.github'), join(repo, '.github'), { recursive: true });
+  mkdirSync(join(repo, 'build/private'), { recursive: true });
+  chmodSync(join(repo, 'build/private'), 0o000);
+  const result = await page(`/?repo=${encodeURIComponent(repo)}`);
+  assert.equal(result.status, 200);
+  assert.match(result.html, /r<\/a> · 1 skill<\/h2>/);
+  assert.deepEqual(summaries(result.html), ['code-style — Follow the project&#39;s code style.']);
+  assert.match(result.html, /<ul class="warnings"><li>warning: build\/private: cannot be read; skipped<\/li><\/ul>/);
 });
 
 test('any other path → 404', async () => {
