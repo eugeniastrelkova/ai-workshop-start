@@ -1,4 +1,6 @@
 // Runs the commands the way the CLI does, with GitHub answering from EXAMPLE below.
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { run } from '../src/commands.ts';
 import { openGitHub, openGitHubOwner, parseGitHubOwner, parseGitHubUrl, type Fetch } from '../src/core/github.ts';
@@ -7,6 +9,23 @@ import { openDirectory } from '../src/local.ts';
 
 export const FIXTURE = fileURLToPath(new URL('../fixture', import.meta.url));
 export const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
+
+/** An alias bomb: each list nine times the one before, f nine to the fifth times x, once resolved. */
+const ALIAS_BOMB = ['a: &a [x,x,x,x,x,x,x,x,x]', ...'bcdef'.split('').map((key, i) => `${key}: &${key} [${Array(9).fill(`*${'abcde'[i]}`).join(',')}]`)];
+
+/**
+ * Writes a repository of 3 skills into `directory`: commits, valid; aliased, an alias without
+ * its anchor; bomb, too many aliases. YAML parses both without an error and fails on their values.
+ */
+export function writeAliased(directory: string) {
+  const skill = (name: string, text: string) => {
+    mkdirSync(join(directory, '.claude/skills', name), { recursive: true });
+    writeFileSync(join(directory, '.claude/skills', name, 'SKILL.md'), text);
+  };
+  skill('commits', '---\nname: commits\ndescription: Writes commit messages.\n---\n');
+  skill('aliased', '---\nname: *nothere\ndescription: An alias with no anchor.\n---\n');
+  skill('bomb', `---\n${ALIAS_BOMB.join('\n')}\nname: bomb\n---\n`);
+}
 
 /** The commit GitHub answers for JetBrains/example. */
 export const EXAMPLE_COMMIT = '5ab6270ab772d113e8ad52ebfcaa0109c522ae00';

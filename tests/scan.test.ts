@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import { openGitHub, type Fetch } from '../src/core/github.ts';
 import { parseSkill } from '../src/core/parse.ts';
 import { replay } from '../src/core/replay.ts';
-import { atlas, CLI, EXAMPLE_COMMIT, FIXTURE, github, KOTLIN_COMMIT, opener } from './helpers.ts';
+import { atlas, CLI, EXAMPLE_COMMIT, FIXTURE, github, KOTLIN_COMMIT, opener, writeAliased } from './helpers.ts';
 
 const fixture = await atlas(['scan', FIXTURE]);
 const example = await atlas(['scan', 'github.com/JetBrains/example']);
@@ -57,6 +57,36 @@ test('./fixture: every skill, sorted by name, linked to its file, copies merged,
     ].join('\n'),
   );
   assert.match(fixture.stderr, /^warning: \.agents\/skills\/release-checklist\/SKILL\.md: malformed front matter: /);
+});
+
+test('a YAML alias without its anchor, or too many aliases → malformed front matter: the directory name and a warning', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'skill-atlas-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  writeAliased(directory);
+  const root = pathToFileURL(directory).href;
+  const scanned = spawnSync(process.execPath, [CLI, 'scan', directory], { encoding: 'utf8' });
+  assert.equal(scanned.status, 0, scanned.stderr);
+  assert.equal(
+    scanned.stdout,
+    [
+      `${directory.split('/').at(-1)} · 3 skills`,
+      'aliased',
+      `  ${root}/.claude/skills/aliased/SKILL.md`,
+      'bomb',
+      `  ${root}/.claude/skills/bomb/SKILL.md`,
+      'commits — Writes commit messages.',
+      `  ${root}/.claude/skills/commits/SKILL.md`,
+      '',
+    ].join('\n'),
+  );
+  assert.equal(
+    scanned.stderr,
+    [
+      'warning: .claude/skills/aliased/SKILL.md: malformed front matter: Unresolved alias (the anchor must be set before the alias): nothere; using the directory name',
+      'warning: .claude/skills/bomb/SKILL.md: malformed front matter: Excessive alias count indicates a resource exhaustion attack; using the directory name',
+      '',
+    ].join('\n'),
+  );
 });
 
 test('words after the repository: only the skills whose name or description contains every word', async () => {
