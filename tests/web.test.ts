@@ -31,7 +31,7 @@ test('serve listens on 127.0.0.1', () => {
 
 test('the page: a field for the repository, submitted as /?repo=<input>, and no result yet', async () => {
   const empty = await page('/');
-  assert.ok(empty.status == 200);
+  assert.equal(empty.status, 200);
   assert.equal(empty.type, 'text/html; charset=utf-8');
   assert.match(empty.html, /<form method="get" action="\/">/);
   assert.match(empty.html, /<input name="repo" value=""/);
