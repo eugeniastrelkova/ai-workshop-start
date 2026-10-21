@@ -10,7 +10,7 @@ import { after, test } from 'node:test';
 import { createBrowserBackend } from '../src/browser.ts';
 import { run } from '../src/commands.ts';
 import { serve } from '../src/web.ts';
-import { CLI, EXAMPLE_COMMIT, FIXTURE, github, KOTLIN_COMMIT, open } from './helpers.ts';
+import { CLI, EXAMPLE_COMMIT, FIXTURE, github, KOTLIN_COMMIT, open, writeAliased } from './helpers.ts';
 
 const { server, url } = await serve(open, 0);
 after(() => server.close());
@@ -71,6 +71,23 @@ test('./fixture: the order of scan, copies as also in, the malformed skill by it
   assert.match(
     fixture.html,
     /<\/ul>\n<ul class="warnings"><li>warning: \.agents\/skills\/release-checklist\/SKILL\.md: malformed front matter: /,
+  );
+});
+
+test('a YAML alias without its anchor, or too many aliases: every skill, by its directory, and the warnings under the skills', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'skill-atlas-web-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  writeAliased(directory);
+  const aliased = await page(`/?repo=${encodeURIComponent(directory)}`);
+  assert.equal(aliased.status, 200);
+  assert.ok(aliased.html.includes(`${directory.split('/').at(-1)}</a> · 3 skills</h2>`));
+  assert.deepEqual(summaries(aliased.html), ['aliased', 'bomb', 'commits — Writes commit messages.']);
+  assert.ok(
+    aliased.html.includes(
+      '</ul>\n<ul class="warnings">' +
+        '<li>warning: .claude/skills/aliased/SKILL.md: malformed front matter: Unresolved alias (the anchor must be set before the alias): nothere; using the directory name</li>' +
+        '<li>warning: .claude/skills/bomb/SKILL.md: malformed front matter: Excessive alias count indicates a resource exhaustion attack; using the directory name</li></ul>',
+    ),
   );
 });
 

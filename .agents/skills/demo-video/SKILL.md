@@ -34,6 +34,7 @@ and a test at once:
 | --- | --- |
 | `filter.spec.ts` › `filter by words` | `./fixture`: 4 skills, then `commit` (3 of 4), `commit kotlin` (2 of 4), one SKILL.md unfolded |
 | `org.spec.ts` › `organization scan` | cvoya-com, each repository with skills, then filtered by `triage` |
+| `malformed.spec.ts` › `malformed front matter` | a YAML alias without its anchor, an alias bomb: 3 skills, two by their directory, a warning for each |
 
 For a new change, extend the test that covers it or add one beside them.
 

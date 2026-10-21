@@ -11,6 +11,7 @@ Skill: id = `repo:path`, name, description, commit, text (the whole SKILL.md)
 - The name: front matter, else the directory
 - The link pins the *scanned commit*
 - Malformed front matter → a *warning*, the scan goes on
+  - YAML that parses but has no value: an *alias without its anchor*, *too many aliases* (an alias bomb) → malformed too
 - Unreachable repository → a clear message, exit code 1
 - **GitHub is asked anonymously**: no token, ever; only public repositories are reachable
 - **Rate limit** → when it resets, from GitHub's answer: `GitHub rate limit reached; try again after 13:45 UTC`
