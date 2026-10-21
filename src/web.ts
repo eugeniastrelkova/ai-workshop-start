@@ -1,11 +1,11 @@
 // The web view: one page with a field for the repository, then its skills and their SKILL.md; for an
 // organization, each of its repositories with skills.
-// Each request scans afresh; nothing is stored. Local only: it reads local directories.
+// A GitHub repository's result is kept in memory by its commit; a local directory is scanned afresh. Local only: it reads local directories.
 import { createServer, type Server } from 'node:http';
 import { countSkills, filterOwner, filterSkills, firstSentence, isOwner } from './commands.ts';
 import { AtlasError } from './core/errors.ts';
 import { skillLink, type Skill } from './core/model.ts';
-import { scan, scanOwner, type Owner, type OwnerResult, type ScanResult, type Source } from './core/scan.ts';
+import { scanCached, scanOwner, type Owner, type OwnerResult, type ScanCache, type ScanResult, type Source } from './core/scan.ts';
 
 export type Open = (input: string) => Promise<Source | Owner>;
 
@@ -13,8 +13,9 @@ export type Page = { status: number; html: string };
 
 /** Listens on 127.0.0.1; port 0 picks a free one. Resolves to the server and its address. */
 export function serve(open: Open, port: number): Promise<{ server: Server; url: string }> {
+  const cache: ScanCache = new Map();
   const server = createServer(async (request, response) => {
-    const page = await render(new URL(request.url ?? '/', 'http://127.0.0.1'), open);
+    const page = await render(new URL(request.url ?? '/', 'http://127.0.0.1'), open, cache);
     response.writeHead(page.status, { 'Content-Type': 'text/html; charset=utf-8' });
     response.end(page.html);
   });
@@ -29,7 +30,7 @@ export function serve(open: Open, port: number): Promise<{ server: Server; url: 
 }
 
 /** `/`: the fields; `/?repo=<input>&words=<words>`: the fields, then the scan or why it failed. */
-export async function render(url: URL, open: Open): Promise<Page> {
+export async function render(url: URL, open: Open, cache?: ScanCache): Promise<Page> {
   if (url.pathname !== '/') return { status: 404, html: layout('Not found', '', '', '<p class="error">Not found</p>') };
   const input = url.searchParams.get('repo')?.trim() ?? '';
   const words = url.searchParams.get('words') ?? '';
@@ -38,10 +39,10 @@ export async function render(url: URL, open: Open): Promise<Page> {
     const opened = await open(input);
     const filter = words.split(/\s+/).filter(Boolean);
     if (isOwner(opened)) {
-      const result = await scanOwner(opened);
+      const result = await scanOwner(opened, cache);
       return { status: 200, html: layout(`${result.owner.id} · Skill Atlas`, input, words, owner(result, filter)) };
     }
-    const result = await scan(opened);
+    const result = await scanCached(opened, cache);
     return { status: 200, html: layout(`${result.repository.id} · Skill Atlas`, input, words, repository(result, filter)) };
   } catch (error) {
     const message = error instanceof AtlasError ? error.message : `Unexpected error: ${error instanceof Error ? error.message : String(error)}`;

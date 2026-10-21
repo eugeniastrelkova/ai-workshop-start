@@ -28,6 +28,27 @@ export type Owner = {
 
 export type OwnerResult = { owner: Owner; repositories: ScanResult[]; warnings: string[] };
 
+/** Results kept by `<repository>@<commit>`: a commit never changes, so its result never goes stale. */
+export type ScanCache = Map<string, ScanResult>;
+
+const CACHE_LIMIT = 200;
+
+/**
+ * `scan`, reusing the result for the same commit. A local directory has no commit: always scanned afresh.
+ * The oldest result goes when the cache is full.
+ */
+export async function scanCached(source: Source, cache?: ScanCache): Promise<ScanResult> {
+  const { id, commit } = source.repository;
+  if (!cache || !commit) return scan(source);
+  const key = `${id}@${commit}`;
+  const kept = cache.get(key);
+  if (kept) return kept;
+  const result = await scan(source);
+  cache.set(key, result);
+  if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value!);
+  return result;
+}
+
 /** fetch → find → parse. Nothing is stored: the result is all there is. */
 export async function scan(source: Source): Promise<ScanResult> {
   const files = findSkills(source.paths);
@@ -75,11 +96,11 @@ function mergeCopies(skills: Skill[]): Skill[] {
  * Each repository, scanned as one; only those with skills, by id. A repository that fails is a
  * warning, unless GitHub refuses every further request.
  */
-export async function scanOwner(owner: Owner): Promise<OwnerResult> {
+export async function scanOwner(owner: Owner, cache?: ScanCache): Promise<OwnerResult> {
   const results = await Promise.all(
     owner.repositories.map(async ({ id, open }): Promise<{ id: string; result?: ScanResult; warnings: string[] }> => {
       try {
-        const result = await scan(await open());
+        const result = await scanCached(await open(), cache);
         return { id, result, warnings: result.warnings.map((warning) => `${id}: ${warning}`) };
       } catch (error) {
         if (!(error instanceof AtlasError) || error instanceof LimitError) throw error;

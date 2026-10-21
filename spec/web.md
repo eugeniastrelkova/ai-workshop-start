@@ -5,7 +5,8 @@ Local only: it listens on *127.0.0.1*, since it reads local directories.
 - A **field** for the repository: a GitHub URL, of a repository or an organization, or a local directory, as in `scan`
 - A second **field** for words, filtering as in `scan`; empty: every skill
 - Submitted: `/?repo=<input>&words=<words>`; a link to a scan is shareable
-- Each request scans **afresh**; *nothing is stored*
+- A GitHub repository's result is kept *in memory* by its **commit**: the same commit is not scanned again, a new commit is
+- A local directory is scanned **afresh** on each request; *nothing is written to disk*
 ## Result
 - `<owner>/<repo> · N skills`, filtered `N of M skills`; skills in the order of `scan`
 - Each skill: **name**, the description's *first sentence*, the **link**, `also in` for copies
