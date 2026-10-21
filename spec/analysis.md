@@ -39,3 +39,5 @@ Skill: id = `repo:path`, name, description, commit, text (the whole SKILL.md)
 ## Listing
 - GitHub: the tree; too large for one answer → *only the top-level agents' folders*, with a warning
 - Local directory: links are `file://` URLs, no commit
+  - A directory in it that cannot be read (`chmod 000`, another user's volume) → a *warning*, the scan goes on: `warning: build/private: cannot be read; skipped`
+  - The directory itself not readable → a clear message, exit code 1

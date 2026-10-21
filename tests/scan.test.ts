@@ -3,7 +3,7 @@
 // where skills live are yours to add.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -135,6 +135,30 @@ test('unreachable repository → a clear message, exit code 1', async () => {
   const offline = await atlas(['scan', 'https://github.com/JetBrains/not-answered']);
   assert.equal(offline.code, 1);
   assert.match(offline.stderr, /^Cannot reach GitHub: not recorded: https:\/\/api\.github\.com\/repos\/JetBrains\/not-answered$/);
+});
+
+test('a directory that cannot be read → a warning, the scan goes on; the directory itself → a clear message', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'skill-atlas-'));
+  const repo = join(root, 'r');
+  t.after(() => {
+    chmodSync(repo, 0o755);
+    chmodSync(join(repo, 'build/private'), 0o755);
+    rmSync(root, { recursive: true, force: true });
+  });
+  mkdirSync(join(repo, '.claude/skills/commits'), { recursive: true });
+  writeFileSync(join(repo, '.claude/skills/commits/SKILL.md'), '---\nname: commits\ndescription: Writes commit messages.\n---\n');
+  mkdirSync(join(repo, 'build/private'), { recursive: true });
+  chmodSync(join(repo, 'build/private'), 0o000); // a build output, a mounted volume: not ours to read
+
+  const scanned = await atlas(['scan', repo]);
+  assert.equal(scanned.code, 0, scanned.stderr);
+  assert.equal(scanned.stdout, `r · 1 skill\ncommits — Writes commit messages.\n  ${pathToFileURL(join(repo, '.claude/skills/commits/SKILL.md')).href}`);
+  assert.equal(scanned.stderr, 'warning: build/private: cannot be read; skipped');
+
+  chmodSync(repo, 0o000);
+  const refused = await atlas(['scan', repo]);
+  assert.equal(refused.code, 1);
+  assert.equal(refused.stderr, `Not a GitHub URL or a readable directory: ${repo}`);
 });
 
 /** GitHub's answer once the requests are used up: no more until 13:45 UTC. */
