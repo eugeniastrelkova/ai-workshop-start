@@ -1,8 +1,9 @@
 // The UI e2e tests, written to be watched: typing at a reading pace, a caption saying what is shown,
-// and, with DEMO=<directory>, each test's video kept there as <name>.webm.
+// and, with DEMO=<directory>, each test's video kept there as <name>.webm. demo.screenshot(name): a key moment,
+// compared to the pixel with tests/e2e/screenshots/<file>/<name>.png.
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { test as base, type Page } from '@playwright/test';
+import { expect, test as base, type Page } from '@playwright/test';
 
 /** The page's document, in the functions that run there. */
 declare const document: any;
@@ -45,6 +46,11 @@ class Demo {
     await this.page.locator(selector).click();
     await this.page.keyboard.press('End');
     await this.page.keyboard.type(text, { delay: 45 });
+  }
+
+  /** A key moment: the page as shown, against its baseline. */
+  async screenshot(name: string) {
+    await expect(this.page).toHaveScreenshot(`${name}.png`);
   }
 
   /** Time to read what is on screen. */
