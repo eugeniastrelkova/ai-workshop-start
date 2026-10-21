@@ -12,6 +12,11 @@ ARG CHROMIUM_REVISION
 ARG CHROMIUM_VERSION
 ARG FFMPEG_REVISION
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+# Every package from one Ubuntu snapshot, the fonts and fontconfig that draw the pixels included: a
+# rebuild installs the same ones until someone moves the date. The snapshot is HTTPS only, so the
+# certificates come first, from the live archive.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+ && echo 'APT::Snapshot "20261021T000000Z";' > /etc/apt/apt.conf.d/50snapshot
 # Chromium's libraries and fonts, from Playwright; Chromium itself straight from Chrome for Testing,
 # which Playwright's CDN mirrors (the CDN is not reachable from every cloud); for the videos, Ubuntu's ffmpeg.
 RUN npx -y playwright@${PLAYWRIGHT_VERSION} install-deps chromium \
