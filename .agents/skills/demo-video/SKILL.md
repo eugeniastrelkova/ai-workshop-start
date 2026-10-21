@@ -44,9 +44,11 @@ npm ci
 ```
 
 and Docker. The first `npm run e2e` builds the image (a few minutes), tagged with the Playwright,
-Chromium and ffmpeg versions of `node_modules/playwright-core/browsers.json`: a Playwright update
-builds it again. Chromium comes straight from Chrome for Testing, which the Playwright CDN mirrors
-(the CDN is blocked in some clouds: `403 Blocked by network policy`); ffmpeg, from Ubuntu.
+Chromium and ffmpeg versions of `node_modules/playwright-core/browsers.json` and a hash of the
+Dockerfile: a Playwright update or an edit to the Dockerfile builds it again. Its two `FROM` bases
+are pinned by digest, so a rebuild gives the same image until someone changes a digest on purpose.
+Chromium comes straight from Chrome for Testing, which the Playwright CDN mirrors (the CDN is
+blocked in some clouds: `403 Blocked by network policy`); ffmpeg, from Ubuntu.
 
 ## Record
 

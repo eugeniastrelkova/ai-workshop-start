@@ -4,7 +4,8 @@
 set -eu
 cd "$(dirname "$0")/.."
 
-# The browser versions of the installed Playwright: the image is rebuilt when they change.
+# The browser versions of the installed Playwright and the hash of the Dockerfile: the image is rebuilt
+# when either changes.
 eval "$(node -e '
   const v = require("./node_modules/playwright-core/package.json").version;
   const browsers = require("./node_modules/playwright-core/browsers.json").browsers;
@@ -13,7 +14,7 @@ eval "$(node -e '
   console.log(`PLAYWRIGHT_VERSION=${v} CHROMIUM_REVISION=${c.revision} CHROMIUM_VERSION=${c.browserVersion} FFMPEG_REVISION=${f.revision}`);
 ')"
 export PLAYWRIGHT_VERSION CHROMIUM_REVISION CHROMIUM_VERSION FFMPEG_REVISION
-image="skill-atlas-e2e:$PLAYWRIGHT_VERSION-$CHROMIUM_REVISION-$FFMPEG_REVISION"
+image="skill-atlas-e2e:$PLAYWRIGHT_VERSION-$CHROMIUM_REVISION-$FFMPEG_REVISION-$(sha256sum tests/e2e/Dockerfile | cut -c1-12)"
 
 if [ -z "$(docker images -q "$image")" ]; then
   echo "e2e: building $image" >&2
