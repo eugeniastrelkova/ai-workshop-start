@@ -10,7 +10,7 @@ import { after, test } from 'node:test';
 import { createBrowserBackend } from '../src/browser.ts';
 import { run } from '../src/commands.ts';
 import { serve } from '../src/web.ts';
-import { CLI, EXAMPLE_COMMIT, FIXTURE, github, KOTLIN_COMMIT, open } from './helpers.ts';
+import { CLI, EXAMPLE_COMMIT, FIXTURE, github, KOTLIN_COMMIT, open, opener } from './helpers.ts';
 
 const { server, url } = await serve(open, 0);
 after(() => server.close());
@@ -236,4 +236,70 @@ test('the CLI serves the page and stores nothing', async (t) => {
   assert.equal(response.status, 200);
   assert.match(await response.text(), /fixture<\/a> · 4 skills/);
   assert.deepEqual(readdirSync(cwd), []);
+});
+
+// The cache in spec/web.md: a GitHub repository's result is kept by its commit; a directory never.
+const RAW_EXAMPLE = /raw\.githubusercontent\.com\/JetBrains\/(example|kotlin)\//;
+
+async function cachingServer(fetch: typeof github) {
+  const raw: string[] = [];
+  const counting: typeof github = (url, init) => {
+    if (RAW_EXAMPLE.test(url)) raw.push(url);
+    return fetch(url, init);
+  };
+  const started = await serve(opener({ fetch: counting }), 0);
+  after(() => started.server.close());
+  const get = async (query: string) => (await globalThis.fetch(new URL(query, started.url))).text();
+  return { raw, get };
+}
+
+const EXAMPLE_URL = `/?repo=${encodeURIComponent('https://github.com/JetBrains/example')}`;
+
+test('the same commit is not scanned again, whatever the words', async () => {
+  const { raw, get } = await cachingServer(github);
+  const first = await get(EXAMPLE_URL);
+  assert.equal(await get(EXAMPLE_URL), first);
+  assert.equal(raw.length, 1);
+  assert.match(await get(`${EXAMPLE_URL}&words=commit`), /1 of 1 skill/);
+  assert.equal(raw.length, 1);
+});
+
+test('a new commit is scanned again', async () => {
+  const second = 'f'.repeat(40);
+  let moved = false;
+  const moving: typeof github = (url, init) => {
+    if (!moved) return github(url, init);
+    if (url.endsWith('/repos/JetBrains/example/commits/main')) return Promise.resolve(Response.json({ sha: second }));
+    if (url.includes(`/git/trees/${second}`)) return github(url.replace(second, EXAMPLE_COMMIT), init);
+    if (url.includes(`/JetBrains/example/${second}/`)) {
+      return Promise.resolve(new Response('---\nname: commits\ndescription: Changed.\n---\n'));
+    }
+    return github(url, init);
+  };
+  const { raw, get } = await cachingServer(moving);
+  assert.match(await get(EXAMPLE_URL), /Write commit messages/);
+  moved = true;
+  const html = await get(EXAMPLE_URL);
+  assert.match(html, /description"> — Changed\./);
+  assert.equal(raw.length, 2);
+});
+
+test('an organization: each repository is scanned once, its warnings stay', async () => {
+  const { raw, get } = await cachingServer(github);
+  const query = `/?repo=${encodeURIComponent('https://github.com/JetBrains')}`;
+  const first = await get(query);
+  assert.equal(await get(query), first);
+  assert.equal(raw.length, 2);
+  assert.match(first, /JetBrains\/gone/);
+});
+
+test('a local directory is scanned afresh', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'atlas-cache-'));
+  after(() => rmSync(directory, { recursive: true, force: true }));
+  cpSync(FIXTURE, directory, { recursive: true });
+  const { get } = await cachingServer(github);
+  const query = `/?repo=${encodeURIComponent(directory)}`;
+  assert.match(await get(query), /4 skills/);
+  rmSync(join(directory, '.github'), { recursive: true });
+  assert.match(await get(query), /3 skills/);
 });
