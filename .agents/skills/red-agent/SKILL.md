@@ -1,6 +1,6 @@
 ---
 name: red-agent
-description: How to attack the Skill Atlas web view as a tester — spec/web.md case by case, then exploratory — and file one GitHub issue per bug it reproduces, labelled "Delegated to AI", with the steps and a video attached.
+description: How to attack the Skill Atlas web view as a tester — spec/web.md case by case, then exploratory — and file one GitHub issue per bug it reproduces, as the red agent's GitHub App (a bot), labelled "Delegated to AI", with the steps and a video.
 ---
 
 # Red agent
@@ -8,7 +8,10 @@ description: How to attack the Skill Atlas web view as a tester — spec/web.md 
 The other skills build ([issue-to-pr](../issue-to-pr/SKILL.md)); this one breaks. It tests **the web
 view only** — `./skill-atlas serve`, the page at `http://127.0.0.1:4321/` — and for each bug it
 can reproduce, opens **one issue**: labelled `Delegated to AI`, with the steps and a video of the
-bug, attached to the issue. Those issues are what `issue-to-pr` picks up next.
+bug. Those issues are what `issue-to-pr` picks up next.
+
+Everything it posts on GitHub is posted **as a bot**: its GitHub App, shown as `<app>[bot]`, never
+as the user whose `gh` is logged in. No App token, no issue: report the bugs instead.
 
 Nothing from a run is merged: work on a scratch branch, `git switch -c red-agent/<yyyy-mm-dd>`,
 and never commit to `main`.
@@ -64,8 +67,9 @@ gh issue list --state all --label "Delegated to AI" --search "<keywords> in:titl
 gh issue list --state all --search "atlas:red-agent <slug> in:body"
 ```
 
-A bug with an open issue, or a closed one that does not hold anymore, gets no new issue. Bugs with
-one cause are one issue: list both steps in it.
+A bug with an open issue gets no new issue. One whose issue was closed as fixed, and that
+reproduces again, gets a new one that links the old. Bugs with one cause are one issue: list both
+steps in it.
 
 ## A video, one per bug
 
@@ -82,11 +86,13 @@ import { expect, test } from './demo.ts';
 
 test('red <slug>', async ({ page, demo }) => {
   test.fail(); // passes once the bug is fixed: then drop this line and keep the test
+  // Enter, then the new page loaded: a caption or a click on the old one throws.
+  const submit = () => Promise.all([page.waitForEvent('load'), page.keyboard.press('Enter')]);
   await page.goto('/');
   await demo.caption('<what the user does>');
   await demo.type('input[name=repo]', './fixture');
   await demo.type('input[name=words]', '<words>');
-  await page.keyboard.press('Enter');
+  await submit();
   await demo.pause();
   await demo.caption('Expected: <the spec> — but <what happens>');
   await demo.pause(2500);
@@ -95,19 +101,32 @@ test('red <slug>', async ({ page, demo }) => {
 ```
 
 Pause and caption **before** the failing assertion: the test ends at it, and so does the video.
-
-```console
-DEMO=test-results/red-agent npm run e2e -- red-<slug>.spec.ts   # → test-results/red-agent/red-<slug>.webm
-```
+Submit with `submit()`, never a bare `Enter`: a caption or a click before the new page has loaded
+throws `Execution context was destroyed`. `waitForURL` is not enough — the old URL often matches
+already (`words=` is there, empty).
 
 A temp directory for a case must be inside the checkout (the image sees only `/skill-atlas`):
 `test-results/red-agent/repos/<slug>/`, ignored by git, typed into the field as
 `./test-results/red-agent/repos/<slug>`.
 
-If the run fails instead (`1 failed`, "Expected to fail, but passed"), the test does not show the
-bug: fix the test, not the expectation. Then look at the video before using it, as demo-video's
-"Check it" says: the length (under about 30 s, under 10 MB), a frame at 2 s and the last one, and
-look at each: the caption and the bug on screen. `ffmpeg` may be only in the image:
+Record it, and see **why** it failed: `test.fail()` takes any failure as the expected one, so a test
+that throws early on a step, not on the bug, still passes, with a video cut short.
+
+```console
+DEMO=test-results/red-agent scripts/e2e.sh red-<slug>.spec.ts --reporter=json 2>/dev/null | node -e '
+  let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => {
+    const r = JSON.parse(s).suites[0].specs[0].tests[0].results[0];
+    console.log(r.status, r.error?.message.split("\n").slice(0, 4).join("\n"));
+  })'                                  # → test-results/red-agent/red-<slug>.webm
+```
+
+It must say `failed` and name the last `expect`, with the spec's text as expected and the bug as
+received. Anything else — another step, a locator that is not there — and the test does not show
+the bug: fix the test, not the expectation. It says `passed`: the bug did not happen.
+
+Then look at the video before using it, as demo-video's "Check it" says: the length (under about
+30 s), a frame at 2 s and the last one, and look at each: the caption and the bug on screen.
+`ffmpeg` may be only in the image:
 
 ```console
 docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/w" -w /w "$(scripts/e2e.sh --tag)" sh -c '
@@ -117,9 +136,77 @@ docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/w" -w /w "$(scripts/e2e.sh --ta
   ffmpeg -v error -y -sseof -1 -i $v -frames:v 1 test-results/red-agent/<slug>-end.png'
 ```
 
+## The bot
+
+A GitHub App, made once by the repository's owner: **Settings → Developer settings → GitHub Apps →
+New GitHub App**, named for the bot (`skill-atlas-red-agent`), no webhook, repository permissions
+**Issues: Read and write** and **Contents: Read and write** (the videos), installed on this
+repository only. Its **App ID**, and a **private key** generated on its page (a `.pem`), go to the
+session or the automation as secrets:
+
+```console
+export RED_AGENT_APP_ID=<App ID>
+export RED_AGENT_APP_KEY="$(cat skill-atlas-red-agent.private-key.pem)"
+```
+
+[app-token.ts](app-token.ts) trades them for an installation token, valid for an hour. Every `gh`
+call that writes runs with it, so GitHub shows the bot; the user's own login is only for reading:
+
+```console
+export NODE_USE_ENV_PROXY=1                                   # behind a proxy, as for the server
+BOT=$(node .agents/skills/red-agent/app-token.ts)
+GH_TOKEN=$BOT gh api /installation/repositories -q '.repositories[].full_name'   # the check: this repository
+```
+
+A run longer than the hour mints a new one. The key is a secret: never print it, commit it, or
+write it under the checkout.
+
+## Put the video on the media branch
+
+A bot cannot attach a file to an issue: GitHub only uploads attachments from its editor, for a
+logged-in person, and has no API for them. So the videos live on one branch of their own,
+**`red-agent-media`** (never merged, never branched from), and the issue shows them from there: an
+animated **GIF**, which GitHub plays inline, and a link to the **`.webm`**, the full recording.
+
+The GIF, from the video, in the image (under 5 MB, or GitHub does not show it inline; if it is
+larger, lower `fps` to 6, then the width to 640):
+
+```console
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/w" -w /w "$(scripts/e2e.sh --tag)" \
+  ffmpeg -v error -y -i test-results/red-agent/red-<slug>.webm \
+  -vf 'fps=8,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse' \
+  test-results/red-agent/red-<slug>.gif
+```
+
+Both files go up through the contents API, as the bot, with `[skip ci]` so CI does not run for the
+branch. The first run makes the branch, as an empty commit with nothing of `main` in it:
+
+```console
+R=repos/eugeniastrelkova/ai-workshop-start
+GH_TOKEN=$BOT gh api $R/git/ref/heads/red-agent-media >/dev/null 2>&1 || {
+  tree=$(echo '{"tree":[{"path":"README.md","mode":"100644","type":"blob",
+    "content":"Videos of the bugs the red agent filed. Never merged.\n"}]}' |
+    GH_TOKEN=$BOT gh api $R/git/trees --input - -q .sha)
+  commit=$(GH_TOKEN=$BOT gh api $R/git/commits -f message='Media of the red agent [skip ci]' -f tree=$tree -q .sha)
+  GH_TOKEN=$BOT gh api $R/git/refs -f ref=refs/heads/red-agent-media -f sha=$commit
+}
+for f in red-<slug>.gif red-<slug>.webm; do
+  base64 -w0 test-results/red-agent/$f > test-results/red-agent/$f.b64
+  GH_TOKEN=$BOT gh api -X PUT $R/contents/$f -f branch=red-agent-media \
+    -f message="Video of <slug> [skip ci]" -F content=@test-results/red-agent/$f.b64 -q .content.path
+done
+```
+
+A file of that name already there (a slug used before): pick a new slug, never overwrite it — an
+older issue shows it. Then check that both open:
+
+```console
+curl -fsSI https://github.com/eugeniastrelkova/ai-workshop-start/raw/red-agent-media/red-<slug>.gif | head -1
+```
+
 ## File the issue
 
-One issue per bug, from a body file:
+One issue per bug, from a body file, as the bot:
 
 ````markdown
 <one sentence: what goes wrong, on the page>
@@ -135,11 +222,13 @@ One issue per bug, from a body file:
 ### Actual
 <exact text on the page, the status code>
 
+### Video
+![<title>](https://github.com/eugeniastrelkova/ai-workshop-start/raw/red-agent-media/red-<slug>.gif)
+
+[The recording, full size (.webm)](https://github.com/eugeniastrelkova/ai-workshop-start/blob/red-agent-media/red-<slug>.webm)
+
 ### Environment
 Commit `<git rev-parse --short HEAD>`, Node `<node -v>`, Chromium in the e2e image.
-
-### Video
-<!-- attached below -->
 
 <details><summary>Repro test: <code>tests/e2e/red-&lt;slug&gt;.spec.ts</code></summary>
 
@@ -152,60 +241,18 @@ Commit `<git rev-parse --short HEAD>`, Node `<node -v>`, Chromium in the e2e ima
 ````
 
 ```console
-gh issue create --label "Delegated to AI" --label bug \
+GH_TOKEN=$BOT gh issue create --repo eugeniastrelkova/ai-workshop-start \
+  --label "Delegated to AI" --label bug \
   --title "<page: what goes wrong>" --body-file test-results/red-agent/<slug>.md
+GH_TOKEN=$BOT gh issue view <number> --json author -q .author.login   # the check: <app>[bot]
 ```
 
 The repro test goes in the body so that `issue-to-pr` can drop it into `tests/e2e/` as the first
-failing test; the `atlas:red-agent` marker is how a later run knows it is filed.
+failing test; the `atlas:red-agent` marker is how a later run knows it is filed. An issue that shows
+anyone but the bot as its author was filed wrong: close it, and file it again with `GH_TOKEN=$BOT`.
 
-## Attach the video
-
-GitHub has no API for attachments: only the editor on github.com uploads one, to
-`https://github.com/user-attachments/assets/<id>`, for a logged-in user. So the attachment goes
-through the browser, in the e2e image, with a session the user saved once:
-
-```console
-npx playwright codegen github.com/login --save-storage="$HOME/.github-session.json"   # log in, close
-export GITHUB_STORAGE_STATE="$HOME/.github-session.json"
-```
-
-That file is a login: never commit it, never print it, never copy it into the checkout for longer
-than the run below.
-
-```console
-cat > test-results/red-agent/attach.mjs <<'EOF'
-// node attach.mjs <issue URL> <video.webm>: a comment on the issue with the video attached.
-import { chromium } from '@playwright/test';
-const [url, video] = process.argv.slice(2);
-const browser = await chromium.launch();
-const page = await browser.newPage({ storageState: '/session.json' });
-await page.goto(url);
-const box = page.locator('textarea').last();
-await box.click();
-await page.locator('input[type=file]').last().setInputFiles(video);
-await page.waitForFunction(
-  (el) => /user-attachments\/assets\//.test(el.value) && !/Uploading/.test(el.value),
-  await box.elementHandle(), { timeout: 120_000 });
-await box.evaluate((el) => (el.value = 'Video of the bug:\n\n' + el.value));
-await box.dispatchEvent('input');
-await page.getByRole('button', { name: /^comment$/i }).last().click();
-await page.waitForLoadState('networkidle');
-await browser.close();
-EOF
-docker run --rm --init --ipc=host --network host -u "$(id -u):$(id -g)" -e HOME=/tmp \
-  -v "$PWD:/skill-atlas" -w /skill-atlas -v "$GITHUB_STORAGE_STATE:/session.json:ro" \
-  -e HTTPS_PROXY -e HTTP_PROXY -e NO_PROXY -e https_proxy -e http_proxy -e no_proxy \
-  "$(scripts/e2e.sh --tag)" node test-results/red-agent/attach.mjs <issue URL> test-results/red-agent/red-<slug>.webm
-gh issue view <number> --comments | grep -o 'https://github.com/user-attachments/assets/[^ )"]*'
-```
-
-It is done when the last line prints the asset URL. GitHub's markup changes: if a locator misses,
-take `page.screenshot()` of the issue, look at it, and fix the locator, not the check.
-
-No `GITHUB_STORAGE_STATE`, or the session logged out (the page shows "Sign in"): leave the issue
-without a video, do not link one from elsewhere instead, and say so in the report with the
-`codegen` line above.
+A bug the page cannot show in a video (a hang, a header): the issue says so under **Video**, and
+nothing goes on the media branch.
 
 ## Clean up and report
 
@@ -215,6 +262,7 @@ git switch main && git branch -D red-agent/<yyyy-mm-dd>
 rm -rf tests/e2e/red-*.spec.ts test-results/red-agent
 ```
 
-The repro tests live on in their issues. Then report, in one table: each issue filed (number, title,
-video attached or not), each bug left out as already filed (with its issue), and the parts of the
-page tested with nothing found. No bug found is a normal result: say so in one line.
+The repro tests live on in their issues, the videos on `red-agent-media`. Then report, in one
+table: each issue filed (number, title, with a video or not), each bug left out as already filed
+(with its issue), and the parts of the page tested with nothing found. No bug found is a normal
+result: say so in one line.
