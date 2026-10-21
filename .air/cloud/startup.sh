@@ -32,6 +32,64 @@ echo "startup: playwright install chromium ..."
 npx playwright install chromium
 echo "startup: playwright install done"
 
+# Chromium's shared libraries and a font, without root (sudo is unavailable): the packages it needs that the
+# image lacks are downloaded with a private apt state and extracted under $CHROMIUM_LIBS, then found through
+# LD_LIBRARY_PATH and FONTCONFIG_FILE. Without fonts, Chromium's renderer aborts in fontconfig.
+CHROMIUM_LIBS="$HOME/.local/chromium-libs"
+APT_DIR="$HOME/.cache/air-apt"
+CHROMIUM_PKGS="libnspr4 libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 libdbus-1-3 libx11-6 libxcomposite1 libxdamage1
+  libxext6 libxfixes3 libxrandr2 libgbm1 libxcb1 libxkbcommon0 libasound2t64 libatspi2.0-0t64 libcairo2
+  libpango-1.0-0 libcups2t64 fonts-liberation"
+if [ ! -f "$CHROMIUM_LIBS/.complete" ]; then
+  echo "startup: fetching Chromium's libraries into $CHROMIUM_LIBS ..."
+  rm -rf "$CHROMIUM_LIBS" "$APT_DIR/debs"
+  mkdir -p "$CHROMIUM_LIBS" "$APT_DIR/lists/partial" "$APT_DIR/archives/partial" "$APT_DIR/debs"
+  apt_opts=(-o "Dir::State::Lists=$APT_DIR/lists" -o "Dir::Cache=$APT_DIR" -o Debug::NoLocking=1)
+  apt-get "${apt_opts[@]}" -q update
+  # shellcheck disable=SC2086
+  closure="$(apt-cache "${apt_opts[@]}" depends --recurse --no-recommends --no-suggests --no-conflicts \
+    --no-breaks --no-replaces --no-enhances $CHROMIUM_PKGS | grep -v '^[ <]' | sort -u)"
+  missing=()
+  for pkg in $closure; do
+    dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q 'install ok installed' || missing+=("$pkg")
+  done
+  echo "startup: downloading ${#missing[@]} packages"
+  (cd "$APT_DIR/debs" && apt-get "${apt_opts[@]}" -q download "${missing[@]}")
+  for deb in "$APT_DIR"/debs/*.deb; do dpkg-deb -x "$deb" "$CHROMIUM_LIBS"; done
+  rm -rf "$APT_DIR/debs"
+  cat > "$CHROMIUM_LIBS/fonts.conf" <<EOF
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <dir>$CHROMIUM_LIBS/usr/share/fonts</dir>
+  <dir>/usr/share/fonts</dir>
+  <cachedir>$HOME/.cache/fontconfig</cachedir>
+  <include ignore_missing="yes">$CHROMIUM_LIBS/etc/fonts/conf.d</include>
+</fontconfig>
+EOF
+  touch "$CHROMIUM_LIBS/.complete"
+  echo "startup: Chromium's libraries ready"
+fi
+
+# The agent's shells get these through a login-shell hook (this script's exports die with it).
+ENV_FILE="$HOME/.skill-atlas-env.sh"
+cat > "$ENV_FILE" <<EOF
+# Written by .air/cloud/startup.sh: Chromium's userspace libraries and fonts, for npm run e2e.
+export LD_LIBRARY_PATH="$CHROMIUM_LIBS/usr/lib/x86_64-linux-gnu:$CHROMIUM_LIBS/lib/x86_64-linux-gnu\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+export FONTCONFIG_FILE="$CHROMIUM_LIBS/fonts.conf"
+EOF
+source_line="[ -f \"$ENV_FILE\" ] && . \"$ENV_FILE\" # skill-atlas-env"
+profile=""
+for f in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+  if [ -f "$f" ]; then profile="$f"; break; fi
+done
+[ -n "$profile" ] || profile="$HOME/.profile"
+for f in "$profile" "$HOME/.bashrc"; do
+  grep -qF '# skill-atlas-env' "$f" 2>/dev/null || echo "$source_line" >> "$f"
+done
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+
 # Mirrors CI (.github/workflows): typecheck, tests, and the real CLI on the fixture.
 healthcheck() {
   echo "healthcheck: typecheck"
@@ -54,6 +112,9 @@ healthcheck() {
   [ "$ok" -eq 0 ] || { echo "healthcheck: web view did not list the fixture skills" >&2; return 1; }
   echo "healthcheck: Chromium launches"
   node -e "import('@playwright/test').then(async ({ chromium }) => { const b = await chromium.launch(); await b.close(); console.log('chromium ok'); })"
+  # The UI e2e test on ./fixture (org.spec.ts asks real GitHub anonymously and needs more than its 60 requests).
+  echo "healthcheck: UI e2e on ./fixture"
+  npx playwright test filter.spec.ts
   echo "healthcheck: OK"
 }
 
