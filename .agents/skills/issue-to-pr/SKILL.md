@@ -18,18 +18,19 @@ curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" \
 ```
 
 Restate it as the **cases** it adds — the inputs and the output a user would see. When the issue
-leaves a decision open — two readings would mean two different implementations — ask on the issue,
-not in the session, then wait for the answer and go on with it. Otherwise write your reading into
-the spec, where the reviewer can see it.
+leaves a decision open — two readings would mean two different implementations — ask in the Slack
+channel `#ai-test-channel`, not in the session, then wait for the answer and go on with it.
+Otherwise write your reading into the spec, where the reviewer can see it.
 
 ```console
-gh issue comment <number> --body "<the question, with the options>"
-gh issue view <number> --comments          # every few minutes, until it is answered
+curl -fsS -H "Authorization: Bearer $SLACK_BOT_TOKEN" -H "Content-Type: application/json" \
+  -d '{"channel":"#ai-test-channel","text":"<issue link> — <the question, with the options>"}' \
+  https://slack.com/api/chat.postMessage            # keep "channel" and "ts" from the reply
+curl -fsS -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+  "https://slack.com/api/conversations.replies?channel=<channel>&ts=<ts>"   # every few minutes
 ```
 
-Without `gh`, `POST` to `/repos/eugeniastrelkova/ai-workshop-start/issues/<number>/comments` and
-`GET` the same URL with `curl` and `$GITHUB_TOKEN`. Do not branch or write the spec until it is
-answered.
+The answer is the first reply in that thread. Do not branch or write the spec until it comes.
 
 Then branch off an up-to-date `main`: `git switch -c spec/<short-name>`. Never commit to `main`.
 
