@@ -20,8 +20,8 @@ image="skill-atlas-e2e:$PLAYWRIGHT_VERSION-$CHROMIUM_REVISION-$FFMPEG_REVISION-$
 
 if [ -z "$(docker images -q "$image")" ]; then
   echo "e2e: building $image" >&2
-  # The proxy, when there is one, for apt and the downloads.
-  docker build -q -t "$image" \
+  # The proxy, when there is one, for apt and the downloads. Not quiet: a failed build shows why.
+  docker build -t "$image" \
     --build-arg PLAYWRIGHT_VERSION --build-arg CHROMIUM_REVISION --build-arg CHROMIUM_VERSION --build-arg FFMPEG_REVISION \
     --build-arg HTTPS_PROXY --build-arg HTTP_PROXY --build-arg NO_PROXY \
     --build-arg https_proxy --build-arg http_proxy --build-arg no_proxy \
