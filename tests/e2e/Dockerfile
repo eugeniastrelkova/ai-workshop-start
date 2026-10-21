@@ -14,8 +14,10 @@ ARG FFMPEG_REVISION
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 # Every package from one Ubuntu snapshot, the fonts and fontconfig that draw the pixels included: a
 # rebuild installs the same ones until someone moves the date. The snapshot is HTTPS only, so the
-# certificates come first, from the live archive.
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+# certificates come first, from the live archive. Its downloads fail now and then (on CI more than
+# anywhere): apt retries each one, with a longer timeout.
+RUN printf 'Acquire::Retries "10";\nAcquire::http::Timeout "60";\nAcquire::https::Timeout "60";\n' > /etc/apt/apt.conf.d/50retries \
+ && apt-get update && apt-get install -y --no-install-recommends ca-certificates \
  && echo 'APT::Snapshot "20261021T000000Z";' > /etc/apt/apt.conf.d/50snapshot
 # Chromium's libraries and fonts, from Playwright; Chromium itself straight from Chrome for Testing,
 # which Playwright's CDN mirrors (the CDN is not reachable from every cloud); for the videos, Ubuntu's ffmpeg.
@@ -24,8 +26,8 @@ RUN npx -y playwright@${PLAYWRIGHT_VERSION} install-deps chromium \
  && cft=https://storage.googleapis.com/chrome-for-testing-public/${CHROMIUM_VERSION}/linux64 \
  && for b in chromium:chrome-linux64 chromium_headless_shell:chrome-headless-shell-linux64; do \
       dir=/ms-playwright/${b%%:*}-${CHROMIUM_REVISION}; mkdir -p $dir; \
-      curl -fsSL -o /tmp/b.zip $cft/${b#*:}.zip && unzip -q /tmp/b.zip -d $dir && rm /tmp/b.zip; \
-      touch $dir/INSTALLATION_COMPLETE $dir/DEPENDENCIES_VALIDATED; \
+      curl -fsSL --retry 5 --retry-all-errors -o /tmp/b.zip $cft/${b#*:}.zip && unzip -q /tmp/b.zip -d $dir && rm /tmp/b.zip \
+      && touch $dir/INSTALLATION_COMPLETE $dir/DEPENDENCIES_VALIDATED || exit 1; \
     done \
  && mkdir /ms-playwright/ffmpeg-${FFMPEG_REVISION} && ln -s /usr/bin/ffmpeg /ms-playwright/ffmpeg-${FFMPEG_REVISION}/ffmpeg-linux \
  && touch /ms-playwright/ffmpeg-${FFMPEG_REVISION}/INSTALLATION_COMPLETE \
