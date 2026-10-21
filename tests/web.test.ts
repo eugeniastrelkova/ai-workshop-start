@@ -2,6 +2,7 @@
 // repository answered in tests/helpers.ts.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { get } from 'node:http';
 import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,6 +19,16 @@ after(() => server.close());
 async function page(query: string) {
   const response = await fetch(new URL(query, url));
   return { status: response.status, type: response.headers.get('content-type'), html: await response.text() };
+}
+
+/** The status of a path sent exactly as written: fetch would read `//` as a protocol-relative URL. */
+function raw(path: string): Promise<number | undefined> {
+  return new Promise((resolve, reject) => {
+    get({ host: '127.0.0.1', port: new URL(url).port, path, signal: AbortSignal.timeout(5000) }, (response) => {
+      response.resume();
+      response.on('end', () => resolve(response.statusCode));
+    }).on('error', reject);
+  });
 }
 
 /** The skills on a page, in order: name and description, as the summary shows them. */
@@ -186,6 +197,25 @@ test('unreachable repository → the message of scan, on the page, status 400', 
 test('any other path → 404', async () => {
   assert.equal((await page('/skills')).status, 404);
   assert.equal((await page('/favicon.ico')).status, 404);
+});
+
+test('// and //<host>/ → 404, and the server stays up', async () => {
+  assert.equal(await raw('//'), 404);
+  assert.equal(await raw('//?repo=./fixture'), 404);
+  assert.equal(await raw('//fixture/'), 404);
+  assert.equal(await raw(`//?repo=${encodeURIComponent(FIXTURE)}`), 404);
+  const fixture = await page(`/?repo=${encodeURIComponent(FIXTURE)}`);
+  assert.equal(fixture.status, 200);
+  assert.match(fixture.html, /fixture<\/a> · 4 skills/);
+});
+
+test('an unexpected error → its message, status 500, and the server stays up', async (t) => {
+  const broken = await serve(() => Promise.reject(new Error('boom')), 0);
+  t.after(() => broken.server.close());
+  const response = await fetch(`${broken.url}?repo=x`);
+  assert.equal(response.status, 500);
+  assert.match(await response.text(), /<p class="error">Unexpected error: boom<\/p>/);
+  assert.equal((await fetch(broken.url)).status, 200);
 });
 
 test('serve: port 4321 by default, --port to change it, anything else is a usage error', async () => {

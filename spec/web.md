@@ -14,4 +14,5 @@ Local only: it listens on *127.0.0.1*, since it reads local directories.
 - An organization: `<owner> · N skills in M repositories`, then each repository with skills as above (filtered: with a match); warnings at the end
 ## Errors
 - Unreachable repository, rate limit: the message of `scan`, on the page, status **400**
-- Any other path: status 404
+- Any other path: status 404, `//` and `//<host>/` too: the path is read as it is sent, never as a URL
+- A request never stops the **server**; an unexpected error: its message, status **500**
