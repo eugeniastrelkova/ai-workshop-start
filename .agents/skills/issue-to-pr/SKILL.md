@@ -30,7 +30,9 @@ curl -fsS -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
   "https://slack.com/api/conversations.replies?channel=<channel>&ts=<ts>"   # every few minutes
 ```
 
-The answer is the first reply in that thread. Do not branch or write the spec until it comes.
+Everything stays in that one thread: the answer is the first reply to your message, and a
+follow-up question goes there too, with `"thread_ts":"<ts>"` in the `chat.postMessage` body — never
+a new top-level message. Do not branch or write the spec until the answer comes.
 
 Then branch off an up-to-date `main`: `git switch -c spec/<short-name>`. Never commit to `main`.
 
