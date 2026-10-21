@@ -19,16 +19,23 @@ curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" \
 
 Restate it as the **cases** it adds — the inputs and the output a user would see. When the issue
 leaves a decision open — two readings would mean two different implementations — ask in the Slack
-channel `#ai-test-channel`, not in the session, then wait for the answer and go on with it.
-Otherwise write your reading into the spec, where the reviewer can see it.
+channel `#ai-test-channel` (`C0CAX4N0H0S`), and only there, then wait for the answer and go on with
+it. Otherwise write your reading into the spec, where the reviewer can see it.
+
+**Never comment on the GitHub issue** — no `gh issue comment`, no `POST …/issues/<number>/comments`
+— not for the question, a follow-up or a status, even when the session was started from the issue.
 
 ```console
-curl -fsS -H "Authorization: Bearer $SLACK_BOT_TOKEN" -H "Content-Type: application/json" \
-  -d '{"channel":"#ai-test-channel","text":"<issue link> — <the question, with the options>"}' \
-  https://slack.com/api/chat.postMessage            # keep "channel" and "ts" from the reply
-curl -fsS -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
-  "https://slack.com/api/conversations.replies?channel=<channel>&ts=<ts>"   # every few minutes
+curl -sS -H "Authorization: Bearer $SLACK_BOT_TOKEN" -H "Content-Type: application/json" \
+  -d '{"channel":"C0CAX4N0H0S","text":"<issue link> — <the question, with the options>"}' \
+  https://slack.com/api/chat.postMessage            # keep "ts" from the reply
+curl -sS -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+  "https://slack.com/api/conversations.replies?channel=C0CAX4N0H0S&ts=<ts>"   # every few minutes
 ```
+
+Slack answers HTTP 200 even when it fails: the post went out only if the reply has `"ok":true`. If
+`$SLACK_BOT_TOKEN` is empty or the reply has `"ok":false`, stop and report its `error` in the
+session — do not fall back to the issue, and do not go on with a guess.
 
 Everything stays in that one thread: the answer is the first reply to your message, and a
 follow-up question goes there too, with `"thread_ts":"<ts>"` in the `chat.postMessage` body — never
