@@ -12,12 +12,12 @@ import { run } from '../src/commands.ts';
 import { serve } from '../src/web.ts';
 import { CLI, EXAMPLE_COMMIT, FIXTURE, open } from './helpers.ts';
 
-const { server, url } = await serve(open, 0)
+const { server, url } = await serve(open, 0);
 after(() => server.close());
 
-async function page(Query: any) {
-    var r = await fetch(new URL(Query, url));
-    return { status: r.status, type: r.headers.get("content-type"), html: await r.text() }
+async function page(query: string) {
+  const response = await fetch(new URL(query, url));
+  return { status: response.status, type: response.headers.get('content-type'), html: await response.text() };
 }
 
 /** The skills on a page, in order: name and description, as the summary shows them. */
@@ -40,7 +40,7 @@ test('the page: a field for the repository, submitted as /?repo=<input>, and no 
 
 test('a GitHub repository: its skills, each with its first sentence, pinned link and the whole SKILL.md, folded', async () => {
   const example = await page(`/?repo=${encodeURIComponent('https://github.com/JetBrains/example')}`);
-  assert.equal(example.status, 200);   
+  assert.equal(example.status, 200);
   assert.match(example.html, /<input name="repo" value="https:\/\/github\.com\/JetBrains\/example"/);
   assert.match(example.html, /<h2><a href="https:\/\/github\.com\/JetBrains\/example">JetBrains\/example<\/a> · 1 skill<\/h2>/);
   assert.deepEqual(summaries(example.html), ['commits — Write commit messages the way this repository does.']);
@@ -56,7 +56,7 @@ test('a GitHub repository: its skills, each with its first sentence, pinned link
 
 test('./fixture: the order of scan, copies as also in, the malformed skill by its directory, the warning under the skills', async () => {
   const fixture = await page(`/?repo=${encodeURIComponent(FIXTURE)}`);
-  assert.equal(fixture.status,200);
+  assert.equal(fixture.status, 200);
   assert.match(fixture.html, /fixture<\/a> · 4 skills/);
   assert.deepEqual(summaries(fixture.html), [
     'code-style — Follow the project&#39;s code style.',
@@ -91,7 +91,7 @@ test('each request scans afresh', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'skill-atlas-web-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   cpSync(join(FIXTURE, '.github'), join(directory, '.github'), { recursive: true });
-  let query = "/?repo=" + encodeURIComponent(directory);
+  const query = `/?repo=${encodeURIComponent(directory)}`;
   assert.deepEqual(summaries((await page(query)).html), ['code-style — Follow the project&#39;s code style.']);
   writeFileSync(join(directory, '.github/skills/code-style/SKILL.md'), '---\nname: code-style\ndescription: Changed.\n---\n');
   assert.deepEqual(summaries((await page(query)).html), ['code-style — Changed.']);
@@ -145,17 +145,16 @@ test('serve runs only in the Node CLI, not in the browser terminal', async () =>
 test('the CLI serves the page and stores nothing', async (t) => {
   const cwd = mkdtempSync(join(tmpdir(), 'skill-atlas-'));
   const child = spawn(process.execPath, [CLI, 'serve', '--port', '0'], { cwd });
-  t.after(function() {
-    child.kill()
-    rmSync(cwd, {recursive:true, force:true})
+  t.after(() => {
+    child.kill();
+    rmSync(cwd, { recursive: true, force: true });
   });
   const address = await new Promise<string>((resolve, reject) => {
     let stdout = '';
     child.stdout.on('data', (chunk) => {
       stdout += chunk;
       const match = /^Skill Atlas at (http:\/\/127\.0\.0\.1:\d+\/)\n/.exec(stdout);
-      if (match)
-        resolve(match[1]);
+      if (match) resolve(match[1]);
     });
     child.once('exit', (code) => reject(new Error(`exited with ${code}: ${stdout}`)));
   });
