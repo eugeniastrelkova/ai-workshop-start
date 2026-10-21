@@ -29,3 +29,4 @@ and their screenshots compared to the pixel with `tests/e2e/screenshots/`.
 - [spec/](spec/): what it does. [AGENTS.md](AGENTS.md): the definition of done.
 - [fixture/](fixture/README.md): a small repository for the tests.
 - [docs/demo/](docs/demo/README.md): videos of the filter and the organization scan, recorded by the UI e2e tests.
+- [.agents/skills/red-agent](.agents/skills/red-agent/SKILL.md): tests the page and files one issue per bug as jetbrains-air[bot], labelled "Delegated to AI", with a video.
