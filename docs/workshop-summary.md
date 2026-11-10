@@ -1,7 +1,7 @@
 # Skill Atlas: what we built in the AI adoption workshop
 
 A write-up for the team: what the project is, how it was built with AI agents, and what we would reuse.
-Facts below come from the repository, its pull requests and its issues (as of 2026-10-21, the last merged PR).
+Facts below come from the repository, its pull requests and its issues.
 
 ## 1. The short version
 
@@ -15,9 +15,6 @@ stay in charge of the specs, the skills (instructions) and the merge button.
 
 - ~860 lines of TypeScript in `src/` (Node 24, no build step, one dependency: `yaml`), ~660 lines of integration
   tests and test helpers.
-- About 45 pull requests in two days (2026-10-20 → 2026-10-21). Most were opened by a person, who wrote the
-  skills and workflow; 9 were opened by the JetBrains Air agent (`app/jetbrains-air`), mostly product features
-  and bug fixes.
 - 35 tests, all passing locally (`npm test`, about 1 s, no network: GitHub answers are replayed).
 
 ## 2. The product
@@ -124,19 +121,7 @@ Concrete evidence it ran end to end:
 - **CI** ([.github/workflows/ci.yml](../.github/workflows/ci.yml)): typecheck, tests, CLI smoke test, web smoke
   test, and the e2e job (Docker image cached by tag; recordings uploaded as an artifact for 14 days).
 
-## 4. Timeline
-
-| When | What |
-| --- | --- |
-| 2026-10-20 morning | Spec of the skill model (#1), web view and scanner (#2, #4), Air cloud startup script (#3), `code-review` skill (#5), `issue-to-pr` skill (#7) |
-| 2026-10-20 midday | First agent-written PRs: test fix (#12), filter by words (#18), organization scan (#19); CI-watching rule (#20); rate-limit messages (#22) |
-| 2026-10-20 afternoon | `address-review` handoff automation (#23, tested through #24–#26), UI e2e tests that record demos (#27), pixel-exact screenshots in CI (#28) |
-| 2026-10-21 | Anonymous GitHub access, no token (#29); questions go to Slack, not the issue (#30, #32); `red-agent` (#35); `status-update` (#40); web-server scan cache (#45) |
-
-Some of those PRs are visible dead ends (#10, #15, #24, #25, #26 were closed): iterations on the agent
-workflow itself.
-
-## 5. Lessons worth taking back to the team
+## 4. Lessons worth taking back to the team
 
 1. **Spec first, tests second, code third.** Specs written as short bullets gave agents something checkable.
    The rule is enforced in the skill ("a spec case without a test is not done"), not left to goodwill.
@@ -152,10 +137,10 @@ workflow itself.
    to wait for the answer rather than guess. Agents open and update PRs; a person decides what merges.
 7. **Agents can find bugs for each other.** The red agent's three bug reports (a server crash, a 500 on a YAML
    alias, a lost directory) each has a PR with a matching title.
-8. **Expect iterations on the workflow itself.** Several closed PRs and test issues show the loop was tuned
-   by trial and error. Budget for that.
+8. **Expect iterations on the workflow itself.** The repo history shows the agent workflow itself was tuned by
+   trial and error. Budget for that.
 
-## 6. Try it yourself
+## 5. Try it yourself
 
 ```console
 $ npm ci
@@ -170,7 +155,7 @@ $ npm run e2e                           # UI e2e tests in Docker; DEMO=docs/demo
 Then read, in this order: [AGENTS.md](../AGENTS.md) → [spec/web.md](../spec/web.md) →
 [issue-to-pr](../.agents/skills/issue-to-pr/SKILL.md) → a merged agent PR such as #19.
 
-## 7. Known gaps and open items
+## 6. Known gaps and open items
 
 - Open PRs awaiting review: #44 (`//` crash), #43 (unreadable directory), #41 (YAML alias), #42 (e2e image
   retries), #34 (Slack questions), #6 (web test refactor).
