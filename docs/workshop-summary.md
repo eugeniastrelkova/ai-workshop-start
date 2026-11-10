@@ -151,7 +151,7 @@ workflow itself.
 6. **Humans keep the decisions.** Ambiguous issues go to a Slack thread for a person; the skill tells the agent
    to wait for the answer rather than guess. Agents open and update PRs; a person decides what merges.
 7. **Agents can find bugs for each other.** The red agent's three bug reports (a server crash, a 500 on a YAML
-   alias, a lost directory) each got a fix PR within hours.
+   alias, a lost directory) each has a PR with a matching title.
 8. **Expect iterations on the workflow itself.** Several closed PRs and test issues show the loop was tuned
    by trial and error. Budget for that.
 
@@ -174,7 +174,7 @@ Then read, in this order: [AGENTS.md](../AGENTS.md) → [spec/web.md](../spec/we
 
 - Open PRs awaiting review: #44 (`//` crash), #43 (unreadable directory), #41 (YAML alias), #42 (e2e image
   retries), #34 (Slack questions), #6 (web test refactor).
-- Open issues #8, #9 and #33 ("Make the skill list nicer") are workshop experiments, not planned work.
+- Open issues #8, #9 and #33 ("Make the skill list nicer") look like workshop experiments rather than planned work.
 - Only public repositories can be scanned and only 60 GitHub requests an hour are available, by design (anonymous access).
 - The web view is local-only (it binds to 127.0.0.1 because it reads local directories).
 - The e2e Docker image is slow to build cold (about 11 minutes); CI caches it.
